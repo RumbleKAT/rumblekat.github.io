@@ -2,7 +2,7 @@
 layout: post
 title:  "Connection Pool과 트랜젝션에 대해 알아보자 feat nodejs 1편"
 date:   2022-01-05 22:12:00 +0900
-categories: jekyll update
+categories: dev
 ---
 
 # 들어가면서
@@ -106,4 +106,4 @@ db('select * from member where name = ?', ['USER8']).then(res=>{
 
 ## 수행결과 
 정상적으로 조회 쿼리를 수행함을 확인할 수 있다.
-![수행 결과](./img/01.png)
+![수행 결과](/assets/img/01.png)
