@@ -1,0 +1,73 @@
+---
+layout: post
+title:  "[오류]object references an unsaved transient instance - save the transient instance before flushing"
+date:   2022-01-10 22:23:00 +0900
+categories: dev
+---
+
+# 들어가면서 
+최근에 JPA를 공부하면서, 분명 책이랑 똑같이 하고 있는데도 특정 부분에서 데이터를 생성하면 에러가 나는 경우가 발생해서 진도를 더 못나가고 있었다. 
+
+## 원인
+오류의 원인은 바로 이랬다. JPA를 사용하면서 @ManyToOne이나 @ManyToMany 같이 FK를 이용한 필드도 동시에 테이블에 저장이 되어야되는데 연쇄적으로 저장이 안되는 문제였다. 
+~~~
+object references an unsaved transient instance - save the transient instance before flushing
+~~~
+
+일단 상황은 이랬다. board entity와 member entity 크게 두가지 테이블로 이루어진 상황에서, board 와 member는 1:N의 관계를 이룬다. 
+
+그러므로 board 안에 writer라는 필드로 Member와 Join을 하게 했는데, 데이터를 insert하는 부분에서 board 테이블에는 데이터가 들어가지만, writer 테이블에는 안들어가는 문제가 생겼다.
+
+
+## 해결 방법
+Join하는 쪽에 Cascade를 걸어주면 자연스럽게 해결이 가능하다. 
+
+~~~ java
+
+package com.rumblekat.board.entity;
+
+import lombok.*;
+
+import javax.persistence.*;
+
+@Entity
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@ToString(exclude = "writer") //@ToString은 항상 exclude 연관관계가 있는 것은 무조건 exclude작업을 진행한다.
+public class Board extends BaseEntity{
+    /*
+    * 게시물의 수정은 필요한 부분만을 변경하고 BoardRepository의 save를 이용하여 처리
+    * */
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long gno; //bno
+
+    private String title;
+
+    private String content;
+
+    //작성자는 아직 처리하지 않는다.
+    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Member writer; //연관관계
+    /*
+    * JPA는 FK쪽을 먼저 해석한다. board와 member읜 관계는 N:1(다대일)
+    * */
+
+    public void changeTitle(String title){
+        this.title = title;
+    }
+
+    public void changeContent(String content){
+        this.content = content;
+    }
+
+}
+
+~~~
+
+## DB 캡처
+
+![수행 결과](/assets/img/03.png)
