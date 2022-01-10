@@ -1,0 +1,320 @@
+---
+layout: post
+title:  "JPQL로 검색"
+date:   2022-01-10 23:00:00 +0900
+categories: dev
+---
+
+# JPQL로 검색
+FK를 이용해서 @ManyToOne과 같은 연관관계를 작성할때, 검색에 필요한 JPQL을 구성하는 것은 어렵다. 
+특히, 여러 엔티티 타입을 JPQL로 직접 처리하는 경우에는 튜플 타입으로 나오기 때문에, 작성하는 방법 자체가 다르고 복잡하다. *(참고자료, 코드로 배우는 스프링부트 웹프로젝트)*
+
+## build.gradle 설정
+QueryDSL 설정은 아래와 같이했고, gradle build를 하고 나서는 compileQuerydsl을 수행해줘야 된다.
+
+~~~ gradle
+buildscript {
+    ext {
+        queryDslVersion = "5.0.0"
+    }
+}
+
+plugins {
+    id 'org.springframework.boot' version '2.6.2'
+    id 'io.spring.dependency-management' version '1.0.11.RELEASE'
+    id 'com.ewerk.gradle.plugins.querydsl' version '1.0.10'
+    id 'java'
+    id 'war'
+}
+
+group = 'com.rumblekat'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '11'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    compileOnly 'org.projectlombok:lombok'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    annotationProcessor 'org.projectlombok:lombok'
+    providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    implementation 'mysql:mysql-connector-java' //mysql 사용시 커넥터 추가
+//    compile group: 'org.thymeleaf.extras', name: 'thymeleaf-extras-java8time'
+    implementation 'com.querydsl:querydsl-jpa'
+    implementation "com.querydsl:querydsl-jpa:${queryDslVersion}"
+    implementation "com.querydsl:querydsl-apt:${queryDslVersion}"
+}
+
+//querydsl 추가 시작
+def querydslDir = "$buildDir/generated/querydsl"
+
+querydsl {
+    jpa = true
+    querydslSourcesDir = querydslDir
+}
+sourceSets {
+    main.java.srcDir querydslDir
+}
+compileQuerydsl{
+    options.annotationProcessorPath = configurations.querydsl
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+    querydsl.extendsFrom compileClasspath
+}
+//querydsl 추가 끝
+
+test {
+    useJUnitPlatform()
+}
+
+~~~
+
+## 수행결과
+![수행 결과](/assets/img/04.png)
+
+## Repository를 확장하는 법
+JPA의 repository를 확장하기 위해선 다음과 같은 단계로 처리된다.
+
+- 쿼리 메서드나 @Query 등으로 처리할수 없는 기능은 별도의 인터페이스로 설계
+- 별도의 인터페이스에 대한 구현 클래스를 작성, 이때 QuerydslRepositorySupport라는 클래스를 부모 클래스로 사용한다.
+- 구현 클래스에 인터페이스의 기능을 Q도메인 클래스와 JPQL Query를 이용해서 구현
+
+QuerydslRepositorySupport는 Spring Data JPA에 포함된 클래스, Querydsl 라이브러리를 이용해서 직접 무언가를 구현할때 필요.
+
+~~~ java
+
+package com.rumblekat.board.repository.search;
+
+import com.querydsl.jpa.JPQLQuery;
+import com.rumblekat.board.entity.Board;
+import com.rumblekat.board.entity.QBoard;
+import lombok.extern.log4j.Log4j2;
+import org.springframework.data.jpa.repository.support.QuerydslRepositorySupport;
+
+import java.util.List;
+
+@Log4j2
+public class SearchBoardRepositoryImpl extends QuerydslRepositorySupport implements SearchBoardRepository {
+
+    public SearchBoardRepositoryImpl() {
+        super(Board.class);
+    }
+
+    @Override
+    public Board search1() {
+
+        log.info("search1......");
+
+        QBoard board = QBoard.board;
+
+        JPQLQuery<Board> jpqlQuery = from(board);
+        jpqlQuery.select(board).where(board.gno.eq(1L));
+
+        log.info("------------------------------");
+        log.info("jpqlQuery");
+        log.info("------------------------------");
+
+        List<Board> result = jpqlQuery.fetch();
+
+        return null;
+    }
+}
+
+~~~
+
+JPA 2.1부터는 left out join처리에 'on' 구문이 추가될 수 있지만, 과거에는 'with'를 이용했다. 
+
+
+## Tuple 객체
+정해진 엔티티 객체 단위가 아니라, 각각의 데이터를 추출하는 경우에는 Tuple이라는 객체를 이용한다. 
+
+~~~ java
+
+   @Override
+    public Board search1() {
+
+        log.info("search1......");
+
+        QBoard board = QBoard.board;
+        QReply reply = QReply.reply;
+        QMember member = QMember.member;
+
+        JPQLQuery<Board> jpqlQuery = from(board);
+        jpqlQuery.leftJoin(member).on(board.writer.eq(member));
+        jpqlQuery.leftJoin(reply).on(reply.board.eq(board));
+
+//        jpqlQuery.select(board).where(board.gno.eq(1L));
+        //Group by 사용시
+//        jpqlQuery.select(board,member.email,reply.count())
+//                        .groupBy(board);
+
+        JPQLQuery<Tuple> tuple = jpqlQuery.select(board,member.email,reply.count());
+        tuple.groupBy(board);
+
+        log.info("------------------------------");
+        log.info(tuple);
+        log.info("------------------------------");
+
+        List<Board> result = jpqlQuery.fetch();
+
+        return null;
+    }
+
+~~~
+
+
+## sort 처리 / count 처리
+Pageable의 Sort 객체는 JPQLQuery의 orderBy()의 파라미터로 전달되어야 하지만 JPQL에서는 Sort 객체를 지원하지않아 OrderSpecifier 을 파라미터로 처리해야 한다. 
+
+~~~ java
+
+@Override
+    public Page<Object[]> searchPage(String type, String keyword, Pageable pageable) {
+        log.info("searchpage .......");
+
+        QBoard board = QBoard.board;
+        QReply reply = QReply.reply;
+        QMember member = QMember.member;
+
+        JPQLQuery<Board> jpqlQuery = from(board);
+        jpqlQuery.leftJoin(member).on(board.writer.eq(member));
+        jpqlQuery.leftJoin(reply).on(reply.board.eq(board));
+
+        /*
+         * Select b,w, count(r) from Board b
+         * Left join b.writer w left join reply r on r.board = b
+         * */
+        JPQLQuery<Tuple> tuple = jpqlQuery.select(board, member, reply.count());
+
+        BooleanBuilder booleanBuilder = new BooleanBuilder();
+        BooleanExpression expression = board.gno.gt(0L);
+        booleanBuilder.and(expression);
+
+        if (type != null) {
+            String[] typeArr = type.split("");
+            BooleanBuilder conditionBuilder = new BooleanBuilder();
+
+            for (String t : typeArr) {
+                switch (t) {
+                    case "t":
+                        conditionBuilder.or(board.title.contains(keyword));
+                        break;
+                    case "w":
+                        conditionBuilder.or(member.email.contains(keyword));
+                        break;
+                    case "c":
+                        conditionBuilder.or(board.content.contains(keyword));
+                        break;
+                }
+            }
+            booleanBuilder.and(conditionBuilder);
+        }
+        tuple.where(booleanBuilder);
+
+        //order by
+        Sort sort = pageable.getSort();
+        //tuple.orderBy(board.bno.desc());
+
+        //중첩된 sort의 경우 forEach로 돌면서 추가
+        //sort 객체의 속성은 PathBuilder를 이용해야하고, PathBuilder를 생성할때 문자열로 된이름은 JPQLQuery를 생성할때 이용하는 변수명과 동일해야한다.
+
+        sort.stream().forEach(order -> {
+            Order direction = order.isAscending() ? Order.ASC : Order.DESC;
+            String prop = order.getProperty();
+            PathBuilder orderByExpression = new PathBuilder(Board.class, "board");
+            tuple.orderBy(new OrderSpecifier<>(direction, orderByExpression.get(prop)));
+        });
+
+        tuple.groupBy(board);
+
+        //page 처리
+        tuple.offset(pageable.getOffset());
+        tuple.limit(pageable.getPageSize());
+        List<Tuple> result = tuple.fetch();
+
+        log.info(result);
+
+        long count = tuple.fetchCount();
+        log.info("count : " + count);
+
+        return new PageImpl<Object[]>(result.stream().map(t ->
+                t.toArray()).collect(Collectors.toList()), pageable, count);
+    }
+
+~~~
+
+## 결과
+
+~~~
+
+2022-01-11 22:54:00.196  INFO 4366 --- [    Test worker] c.r.b.r.s.SearchBoardRepositoryImpl      : searchpage .......
+Hibernate: 
+    select
+        board0_.gno as col_0_0_,
+        member1_.email as col_1_0_,
+        count(reply2_.rno) as col_2_0_,
+        board0_.gno as gno1_0_0_,
+        member1_.email as email1_1_1_,
+        board0_.moddate as moddate2_0_0_,
+        board0_.regdate as regdate3_0_0_,
+        board0_.content as content4_0_0_,
+        board0_.title as title5_0_0_,
+        board0_.writer_email as writer_e6_0_0_,
+        member1_.name as name2_1_1_,
+        member1_.password as password3_1_1_ 
+    from
+        board board0_ 
+    left outer join
+        member member1_ 
+            on (
+                board0_.writer_email=member1_.email
+            ) 
+    left outer join
+        reply reply2_ 
+            on (
+                reply2_.board_gno=board0_.gno
+            ) 
+    where
+        board0_.gno>? 
+        and (
+            board0_.title like ? escape '!'
+        ) 
+    group by
+        board0_.gno 
+    order by
+        board0_.gno desc,
+        board0_.title asc limit ?
+2022-01-11 22:54:00.300  INFO 4366 --- [    Test worker] c.r.b.r.s.SearchBoardRepositoryImpl      : [[Board(gno=100, title=Title...100, content=                    Content...100
+                ), Member(email=user100@aaa.com, password=1111, name=USER100), 2], [Board(gno=91, title=Title...91, content=Content...91), Member(email=user91@aaa.com, password=1111, name=USER91), 0], [Board(gno=81, title=Title...81, content=Content...81), Member(email=user81@aaa.com, password=1111, name=USER81), 1], [Board(gno=71, title=Title...71, content=Content...71), Member(email=user71@aaa.com, password=1111, name=USER71), 0], [Board(gno=61, title=Title...61, content=Content...61), Member(email=user61@aaa.com, password=1111, name=USER61), 2], [Board(gno=51, title=Title...51, content=Content...51), Member(email=user51@aaa.com, password=1111, name=USER51), 3], [Board(gno=41, title=Title...41, content=Content...41), Member(email=user41@aaa.com, password=1111, name=USER41), 0], [Board(gno=31, title=Title...31, content=Content...31), Member(email=user31@aaa.com, password=1111, name=USER31), 1], [Board(gno=21, title=Title...21, content=Content...21), Member(email=user21@aaa.com, password=1111, name=USER21), 1], [Board(gno=19, title=Title...19, content=Content...19), Member(email=user19@aaa.com, password=1111, name=USER19), 1]]
+Hibernate: 
+    select
+        count(distinct board0_.gno) as col_0_0_ 
+    from
+        board board0_ 
+    left outer join
+        member member1_ 
+            on (
+                board0_.writer_email=member1_.email
+            ) 
+    left outer join
+        reply reply2_ 
+            on (
+                reply2_.board_gno=board0_.gno
+            ) 
+    where
+        board0_.gno>? 
+        and (
+            board0_.title like ? escape '!'
+        )
+2022-01-11 22:54:00.309  INFO 4366 --- [    Test worker] c.r.b.r.s.SearchBoardRepositoryImpl      : count : 19
+~~~
