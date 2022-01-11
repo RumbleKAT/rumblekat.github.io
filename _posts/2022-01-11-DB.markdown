@@ -1,0 +1,105 @@
+---
+layout: post
+title:  "DB 이중화 feat Mysql"
+date:   2022-01-11 23:08:00 +0900
+categories: dev
+---
+
+# 들어가면서
+Replication이란, 2대 이상의 DBMS로 데이터를 나누는 구조, Master / Slave 구성으로 이루어진다. 
+[참고자료](https://server-talk.tistory.com/240)
+
+- Master DBMS : 데이터 등록,수정,삭제 요청시 바이너리 로그를 생성하여, Slave 서버로 전달
+(동시성 높은 트렌젝션 부분 담당)
+
+- Slave DBMS : Master DBMS에서 전달받은 바이너리 로그를 이용하여, 데이터로 반영(데이터 요청시 사용)
+(읽기 전용 데이터 조회)
+
+![Master/Slave](https://mariadb.com/sites/default/files/pictures/Images/dbreplication173.png)
+
+## 활용 방법
+ - Master DBMS가 장애시, Slave DBMS를 대신 사용가능(fail over)
+ - DBMS 부화분산 목적, 사용자의 폭주로 인하여, 1대의 DB 서버가 감당할 수 없을때 사용
+
+**주의 사항**
+- 호환성을 위해 Replication을 사용하는 Mysql 버전 동일하게 맞추기
+- 만약 버전이 다르면, Slave가 상위 버전으로 세팅
+- Repliacation 시동시 Master -> Slave 순으로 가동
+
+## Docker를 활용한 Mysql Replication
+[참고자료](https://huisam.tistory.com/entry/mysql-replication?category=689280)
+디렉토리 구성은 아래와 같다. 
+
+![디렉토리구성](/assets/img/05.png)
+
+## 실행순서
+1. master-slave 두 서버 띄우기
+~~~
+docker-compose up -d
+~~~
+2. internal IP 찾기
+- Network id를 먼저 찾는다. 
+~~~
+❯ docker network ls
+NETWORK ID     NAME                    DRIVER    SCOPE
+c936b9b7cc42   repli_net-mysql         bridge    local
+~~~
+
+- docker inspect {NETWORK ID}에서 IPv4Address에 해당하는 값을 기억한다.
+
+~~~
+
+❯ docker inspect c936b9b7cc42
+
+[
+    {
+        "Name": "repli_net-mysql",
+        "Id": "c936b9b7cc4214b978aa64d7397d218c0fe62dd76389971ef2134ea8a8560765",
+        "Created": "2022-01-11T14:36:21.9461848Z",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.19.0.0/16",
+                    "Gateway": "172.19.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": true,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "31b2a62702a6249c666076d7182a34c30ac3e2939ea6924b84b237fb6a57e915": {
+                "Name": "repli_db-slave_1",
+                "EndpointID": "afbd9ee57c687c50fab1b39be1b97919229fff04fc418269612c058cbff06554",
+                "MacAddress": "02:42:ac:13:00:03",
+                "IPv4Address": "172.19.0.3/16",
+                "IPv6Address": ""
+            },
+            "43bb2e42864eaa10c730ae53c01ab9817a49c5c34db2eba62ce3e14f92779cdb": {
+                "Name": "repli_db-master_1",
+                "EndpointID": "6e2d8cc63e3fc5d6322ab2de3d6bf414ee49a885ded7e26d66b4afb9188e6090",
+                "MacAddress": "02:42:ac:13:00:02",
+                "IPv4Address": "172.19.0.2/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {},
+        "Labels": {
+            "com.docker.compose.network": "net-mysql",
+            "com.docker.compose.project": "repli",
+            "com.docker.compose.version": "1.29.0"
+        }
+    }
+]
+
+~~~
+3. Slave에서 Master로 연결한다.
