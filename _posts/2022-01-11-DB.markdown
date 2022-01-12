@@ -103,3 +103,129 @@ c936b9b7cc42   repli_net-mysql         bridge    local
 
 ~~~
 3. Slave에서 Master로 연결한다.
+
+사실 이 부분에서 삽질을 조금했었다. 내가 마주했었던 오류는, "Error 1236 - "Could not find first log file name in binary log index file" 이었는데, slave 서버에서 MASTER_LOG_FILE을 세팅할 때, master 서버에 존재하는 log file을 기준으로 세팅을 해야한다.
+
+이를 위해서 master 서버에서 아래 문구를 치면 이렇게 나온다. 
+~~~
+mysql> SHOW BINARY LOGS;
++------------------+-----------+
+| Log_name         | File_size |
++------------------+-----------+
+| mysql-bin.000001 |       177 |
+| mysql-bin.000002 |   3072319 |
+| mysql-bin.000003 |       177 |
+| mysql-bin.000004 |       154 |
++------------------+-----------+
+~~~
+
+이중에 없는 로그 파일 인덱스를 선택하면 에러가 난다.
+그 후 아래와 같이 세팅을 맞춰줬다. 결론적으로, Slave_IO_Running: Yes / Slave_SQL_Running: Yes 으로 표시되면 동기화가 완료된 것이다.
+
+~~~
+mysql> CHANGE MASTER TO MASTER_HOST='172.19.0.3', MASTER_USER='root', MASTER_PASSWORD='password', MASTER_LOG_FILE='mysql-bin.000003',MASTER_LOG_POS=0;
+Query OK, 0 rows affected, 2 warnings (0.00 sec)
+
+mysql> stop slave;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> start slave;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> show slave status\G;
+*************************** 1. row ***************************
+               Slave_IO_State: Waiting for master to send event
+                  Master_Host: 172.19.0.3
+                  Master_User: root
+                  Master_Port: 3306
+                Connect_Retry: 60
+              Master_Log_File: mysql-bin.000004
+          Read_Master_Log_Pos: 154
+               Relay_Log_File: mysql-relay-bin.000004
+                Relay_Log_Pos: 367
+        Relay_Master_Log_File: mysql-bin.000004
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Master_Log_Pos: 154
+              Relay_Log_Space: 787
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Master_SSL_Allowed: No
+           Master_SSL_CA_File: 
+           Master_SSL_CA_Path: 
+              Master_SSL_Cert: 
+            Master_SSL_Cipher: 
+               Master_SSL_Key: 
+        Seconds_Behind_Master: 0
+Master_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Master_Server_Id: 10
+                  Master_UUID: fd513db6-72eb-11ec-890b-0242ac130002
+             Master_Info_File: /var/lib/mysql/master.info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+      Slave_SQL_Running_State: Slave has read all relay log; waiting for more updates
+           Master_Retry_Count: 86400
+                  Master_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Master_SSL_Crl: 
+           Master_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 
+            Executed_Gtid_Set: 
+                Auto_Position: 0
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Master_TLS_Version: 
+1 row in set (0.00 sec)
+~~~
+
+# 테스트
+결론적으로 테스트를 해보기 위해서, DB와 테이블 데이터를 직접 넣어보았다.
+
+## Master DB
+~~~ 
+mysql> use bootex;
+Database changed
+
+mysql> create table Member (ID int not null primary key, name varchar(100));
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> insert into Member(id, name)  values (1,"song")
+    -> ;
+Query OK, 1 row affected (0.01 sec)
+
+~~~
+
+## Slave DB
+~~~
+mysql> show tables;
++------------------+
+| Tables_in_bootex |
++------------------+
+| Member           |
++------------------+
+1 row in set (0.00 sec)
+
+mysql> select * from Member;
++----+------+
+| ID | name |
++----+------+
+|  1 | song |
++----+------+
+1 row in set (0.00 sec)
+~~~
