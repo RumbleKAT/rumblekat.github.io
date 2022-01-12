@@ -1,0 +1,112 @@
+---
+layout: post
+title:  "DB Index feat Mysql"
+date:   2022-01-12 21:40:00 +0900
+categories: dev
+---
+
+# 들어가면서
+[참고자료](https://yurimkoo.github.io/db/2020/03/14/db-index.html)DB에는 수많은 데이터가 쌓이게 된다. 그러면서 자연스럽게 문제가 되는 부분이 바로 조회 속도에 대한 이슈이다. 인덱스는 테이블의 동작 속도를 높여주는 자료 구조이다. DB 메모리에 일정 공간을 사용해 저장이 되는 특징이 있다. 
+
+# 인덱스의 특징
+- WHERE 절에 사용할 컬럼에 대한 효율화
+- 인덱스는 하나 혹은 여러개의 컬럼에 대해 설정 가능
+- 단일 인덱스를 여러개로, 여러 컬럼을 묶어 복합 인덱스 설정 가능
+- 그러나 무조건 많이 설정하는게 검색 속도 향상을 높여주지는 않는다.
+> 조회시 자주 사용하고, 고유한 값 위주로 인덱스를 설정한다. 
+- Update, Delete는 WHERE 절에 잘 설정된 인덱스로 조건을 붙여주면 조회할 때 성능은 크게 저하되지 않으나, 업데이트 속도가 빨라지는 것은 아니다.
+- 테이블 당 3~5개가 적당하고 4가지 기준을 가진다.
+    * 카디널리티(한 칼럼이 가지고 있는 중복 정도)
+    * 선택도(특정 필드값을 지정했을때 선택되는 레코드 수를 테이블 전체 레코드 수로 나눈 것)
+    * 활용도 
+    * 중복도(중복이 적은 것 위주)
+
+
+[참고자료](https://isstory83.tistory.com/131)
+## 인덱스를 타지 않는 쿼리 모음
+- 인덱스 칼럼절을 변형한 경우(수식이나, 함수 등으로 인덱스 칼럼 절을 변경하는 경우 / 대입되는 컬럼이나 상수 부분에 적용해야 함)
+- 내부적으로 데이터 형변환이 일어나는 경우
+  ('20220112' -> TO_DATE('20220112','YYYYMMDD'))
+- 조건절에 NULL 또는 NOT NULL을 사용하는 경우
+  (기본적으로 인덱스를 구성한 컬럼 값이 전부 NULL이라면 인덱스는 이런 값을 저장하지 않는다. 만약 NOT NULL이 분석 대상이라면 해당 컬럼을 NULL 허용칼럼으로 허용한다. IS NULL -> > "" IS NOT NULL -> >= 0)
+- 부정형으로 조건을 사용하는 경우(!사용)
+- Like 연산자를 사용하는 경우
+- OR 조건 사용(= UNION ALL 로 변환)
+
+# 실제 예시
+
+## Memo Entity
+~~~ java
+
+import lombok.*;
+
+import javax.persistence.*;
+
+@Entity
+@Table(name="tbl_memo")
+@ToString
+@Getter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class Memo {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long mno;
+
+    @Column(length = 200, nullable = false)
+    private String memoText;
+}
+
+~~~
+10만건 데이터 삽입 후 select test
+~~~
+mysql> select count(*) from tbl_memo;
++----------+
+| count(*) |
++----------+
+|   100191 |
++----------+
+1 row in set (0.01 sec)
+
+
+~~~
+
+
+## Test Sample 삽입
+
+~~~ java
+
+@Test
+    public void testInsertDummies(){
+        //101 -> 100000개 까지 더미 생성
+        IntStream.rangeClosed(101,100000).forEach(i -> {
+            Memo memo = Memo.builder().memoText("Sample..."+i).build();
+            memoRepository.save(memo);
+        });
+    }
+
+
+~~~
+
+1. 인덱스 추가로 생성
+~~~
+CREATE INDEX <인덱스명> ON <테이블명> (칼럼명1,칼럼명2...);
+
+bootex> create index memo_text on tbl_memo ( memo_text )
+~~~
+
+![인덱스 생성_1](/assets/img/06.png)
+
+2. SHOW INDEX FROM tbl_memo;
+
+![인덱스 생성_2](/assets/img/07.png)
+
+3. explain select * from tbl_memo where memo_text = "Sample...2000";
+
+![인덱스 생성_3](/assets/img/08.png)
+
+4. explain select * from tbl_memo where memo_text like "Sample%"; 
+*(인덱스를 적용해도 적용 rows의 수가 많은 것을 볼 수 있다. 즉, 인덱스의 영향을 덜 받는다.)*
+
+![인덱스 생성_4](/assets/img/09.png)
