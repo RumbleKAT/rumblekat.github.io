@@ -71,3 +71,50 @@ public class Board extends BaseEntity{
 ## DB 캡처
 
 ![수행 결과](/assets/img/03.png)
+
+-- 2022.01.14 추가 내용
+
+## org.hibernate.PersistentObjectException: detached entity passed to persist
+
+이 오류의 원인은 종속성에 있다. 만약 A - B가 1:N의 관계에 있는 상태에서 B - C도 1:N의 관계일 때, C를 추가하는 작업에서 B가 한번 더 저장되는 문제가 발생한다. 
+
+[참고자료](https://delf-lee.github.io/post/detached-entity-passed-to-persist-error/)
+
+## CascadeType의 종류
+- CascadeType.RESIST: 엔티티를 생성하고, 연관 엔티티를 추가하였을 때 persist() 를 수행하면 연관 엔티티도 함께 persist()가 수행된다. 만약 연관 엔티티가 DB에 등록된 키값을 가지고 있다면 detached entity passed to persist Exception이 발생한다.
+- CascadeType.MERGE: 트랜잭션이 종료되고 detach 상태에서 연관 엔티티를 추가하거나 변경된 이후에 부모 엔티티가 merge()를 수행하게 되면 변경사항이 적용된다.(연관 엔티티의 추가 및 수정 모두 반영됨)
+- CascadeType.REMOVE: 삭제 시 연관된 엔티티도 같이 삭제됨
+- CascadeType.DETACH: 부모 엔티티가 detach()를 수행하게 되면, 연관된 엔티티도 detach() 상태가 되어 변경사항이 반영되지 않는다.
+- CascadeType.ALL: 모든 Cascade 적용
+
+## 해결책
+결국 아래 테이블의 Casecade 속성을 빼면서 해결이 가능했다. 구글링 해보니, 처음 Save를 할때 replyRepository에서 진행했었는데, 이를 참조하는 Board 객체가 detached 되었고, 다시 Persist가 불가능해져서 그렇다고 한다..
+
+Casecade 속성을 MERGED, DETACHED로 변경해도 가능하다고 한다. 
+
+~~~ java
+
+@Entity
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@ToString(exclude = "board") //@ToString에 주의(연관관계 대상 필드 exclude)
+public class Reply extends BaseEntity{
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long rno;
+
+    private String text;
+
+    private String replyer;
+
+    //TODO: Board와 연관관계 board의 writer까지 가져오면 모두 left outer join으로 가져오게된다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    private Board board;
+}
+
+~~~
+
+
