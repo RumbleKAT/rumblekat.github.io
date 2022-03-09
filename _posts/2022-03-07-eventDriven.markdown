@@ -29,7 +29,7 @@ router.get('/getdata',(req,res,next)=>{
 
 ~~~
 
-![샘플](https://www.simform.com/wp-content/uploads/2020/04/node.js-architecture-1024x513.png)
+![샘플](/assets/img/24.png)
 
 Nodejs의 내부 구조는 JS와 C++언어로 구성되어있다. 이중 Libuv는 100% C++로 구성된 라이브러리이다. V8엔진에선 JS를 C++로 변환해준다. Nodejs에서 동작하는 이벤트 루프는 libuv 내에서 구현되는데, **Nodejs는 싱글 스레드이기 때문에, 하나의 이벤트 루프를 가지면서, 하나의 스레드가 모든 것을 처리한다.**
 
