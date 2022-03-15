@@ -1,0 +1,51 @@
+---
+layout: post
+title:  "도메인 적용과 SSL NginX" 
+date:   2022-03-15 21:00:00 +0900
+categories: dev
+---
+
+# 들어가면서
+사이드 프로젝트 막바지로 가면서, 본격적으로 배포작업을 하고있는데 문제가 되는 부분이 바로, SSL이었다. 프론트 페이지가 github page상에 배포가 된 상태에서 GCE의 VM이랑 통신을 하도록 설계를 했었는데, https 서버에선 http 통신을 하지 못하도록 되어있는 부분이 있어서, 이부분도 해소할겸 custom domain과 SSL 적용 작업을 진행했다. 
+
+# custom domain 적용작업
+~~~
+ $ nslookup [도메인 명]
+~~~
+
+필자는 가비아에서 도메인을 구매했고, 이를 서버에 적용하는 작업을 진행했다. 먼저 아래의 명령어를 쳐서 해당 도메인이 가비아에 정상 등록되었는지 확인을 진행했다.
+
+![샘플](/assets/img/0315/01.png)
+
+# 가비아 내 도메인 관리 설정
+A 타입으로 호스트를 www 와 @로 맞추고 값/위치엔 서비스 외부 IP를 입력한다.
+
+![샘플](/assets/img/0315/05.png)
+
+
+~~~
+$ sudo vim /etc/nginx/sites-available/default
+~~~
+
+VM상에서 위 명령어를 친후, 아래와 같이 도메인을 등록해줬다.
+
+![샘플](/assets/img/0315/04.png)
+
+![샘플](/assets/img/0315/02.png)
+
+
+# CURL 수행하면서 도메인 적용 정상확인
+
+![샘플](/assets/img/0315/03.png)
+
+# SSL 적용
+도메인 적용을 확인했으니, SSL을 알아본다.
+SSL의 경우, 아래 링크를 참고해서 만들었다. 
+
+**참고자료**
+>https://beside-lab.tistory.com/entry/GCE-Google-Compute-Engine%EC%97%90-nginx%EB%A1%9C-%EB%AC%B4%EB%A3%8C%EB%A1%9C-https-%EC%A0%81%EC%9A%A9%ED%95%98%EA%B8%B0
+
+여기서 중요한건 Let's Encrypt가 유효기간이 3개월이기 때문에 3개월 마다 자동갱신 명령어를 입력해서 수행해줘야 한다.
+
+curl로 https를 호출하면 정상적으로 리턴이 온다.
+![샘플](/assets/img/0315/06.png)
