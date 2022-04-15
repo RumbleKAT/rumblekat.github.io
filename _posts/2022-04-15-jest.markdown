@@ -1,0 +1,251 @@
+---
+layout: post
+title:  "Jest" 
+date:   2022-04-15 20:32:00 +0900
+categories: dev
+---
+
+# 들어가면서
+Jest 이전에는 자바스크립트 코드를 테스트하려면 여러가지 테스트 라이브러리를 조합해서 사용했었다. 예를들면 Mocha + Expect + Sinon과 같은 라이브러리를 사용해서 테스트를 한다던지, 테스트 커버리지 측정을 위해서 Istanbul이라는 라이브러리를 쓴다던지 말이다. 와우..듣기만 해도 테스트를 위해 쓰는 라이브러리가 엄청나다. 하지만, Jest가 등장하면서 Test Runner, Matcher, Mocking ,Coverage 측정까지 모든것을 제공해주기 때문에 아주 편리하다.
+
+> 참고 링크 1
+ https://www.daleseo.com/jest-basic/
+
+> 참고 링크 2
+https://hoony-gunputer.tistory.com/entry/jest-여러가지-totoBe-toEqual-toStrictEqual-사용해보기 [후니의 컴퓨터]
+
+보통 테스트 라이브러리들은 개발의존성으로 설치한다.
+~~~ 
+> npm i -D jest
+~~~
+
+~~~ json
+{
+  "name": "jesttest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "jest": "^27.5.1"
+  }
+}
+~~~
+
+npm 테스트를 실행하면 프로젝트 내에서 모든 테스트 파일을 찾아서 테스트를 실행한다. Jest는 기본적으로 test.js로 끝나거나,  __test__ 디렉토리 안에 있는 파일들은 모두 테스트 파일로 인식한다. 만약 특정 테스트 파일만 실행하고 싶은 경우 npm test {파일 or 경로}를 입력한다.  
+
+app.test.js
+
+~~~ javascript
+test("1 + 1 = 2",()=>{
+    expect(1+1).toBe(2);
+})
+~~~
+
+![샘플](/assets/img/0415/01.png)
+
+![샘플](/assets/img/0415/02.png)
+
+특히, VSCode의 Test 기능을 사용하면, 미리 단위 테스트된 결과를 볼 수 있다. 만약 잘못된 답을 써넣는다면? **에러로 캐치되어 표시된다.**
+
+![샘플](/assets/img/0415/03.png)
+
+# Matcher 
+
+jest에선 여러가지 Matcher 함수를 제공한다.
+
+## toBe
+숫자나 문자와 같은 객체가 아닌 기본형 값을 비교할때 사용된다. 
+
+## toEqual
+원시적인 타입을 사용한다면 toBe와 차이가 없으나, 객체의 주소값을 기준으로 체크한다.
+(java로 치면 == , isEqual()의 차이, js는 == , === 의 차이)
+
+~~~ js
+var a = { bar: 'baz' }, 
+    b = { foo: a },
+    c = { foo: a }; 
+    
+    b.foo.bar === c.foo.bar // true 
+    b.foo.bar === a.bar //true 
+    c.foo === b.foo //true
+
+    //그러나 
+    b === c // false
+
+출처: https://hoony-gunputer.tistory.com/entry/jest-여러가지-totoBe-toEqual-toStrictEqual-사용해보기 [후니의 컴퓨터]
+
+~~~
+
+## toStrictEqual
+특정 요소에 undefined가 나오는 것을 허용하지 않는다.
+
+~~~ js
+
+const fn = { 
+    add : (num1, num2) => num1 * num2, 
+    makePerson: (name, age) =>({name, age, married:undefined}) 
+} 
+
+test('strictEqualTest', () => { 
+    expect(fn.makePerson("song", 10)).toStrictEqual({ name:"song", age:10}); 
+});
+
+~~~
+
+![샘플](/assets/img/0415/04.png)
+
+## toBeTruthy() / toBeFalsy()
+true or false로 간주되면 통과.
+0은 false로 1은 true로 
+
+~~~ js
+
+test("number 0 is falsy but string 0 is truthy", () => {
+  expect(0).toBeFalsy();
+  expect("0").toBeTruthy();
+});
+
+~~~
+
+## toHaveLength() / toContain()
+배열의 길이를 체크, 특정 원소가 배열에 들어있는지 체크
+
+~~~ js
+
+test("array", () => {
+  const colors = ["Red", "Yellow", "Blue"];
+  expect(colors).toHaveLength(3);
+  expect(colors).toContain("Yellow");
+  expect(colors).not.toContain("Green");
+});
+
+~~~
+
+## toMatch()
+정규식 기반의 테스트시 사용
+
+~~~ js
+
+test("string", () => {
+  expect(getUser(1).email).toBe("user1@test.com");
+  expect(getUser(2).email).toMatch(/.*test.com$/);
+});
+
+~~~
+
+## toThrow()
+예외 발생여부 테스트
+
+~~~ js
+
+function getUser(id) {
+  if (id <= 0) throw new Error("Invalid ID");
+  return {
+    id,
+    email: `user${id}@test.com`,
+  };
+}
+//에러 발생 케이스 수행시, 반드시 expect로 감싸야 test 결과가 passed로 나온다. 
+test("throw when id is non negative", () => {
+  expect(() => getUser(-1)).toThrow();
+  expect(() => getUser(-1)).toThrow("Invalid ID");
+});
+~~~
+
+# Mocking
+단위 테스트할때 해당 코드 의존부분을 가짜로 대체하는 기법. 직접 데이터 생성이 부담인 경우, mocking이 많이 사용된다.
+- I/O 작업이 포함된 테스트는 실행속도가 떨어지기 때문에, 이 부분을 했다고 가정하에 테스트 돌림
+
+Mocking은 실제 객체인척 하는 가짜 객체를 생성하는 매커니즘을 제공한다. 그리고 가짜 객체에 어떤 일들이 발생했는지를 기억하기 때문에 가짜 객체가 내부적으로 어떻게 사용되는지 검증 가능.
+항상 동일한 결과를 내는 테스트를 작성할 수 있다.
+
+## jest.fn()
+jest는 가짜함수를 생성할 수 있도록 jest.fn() 함수를 제공한다.
+toBeCalled 함수를 사용하면 가짜함수가 몇번 호출되었는지 검증 할 수 있다.
+
+~~~ js
+const mockFn = jest.fn();
+
+mockFn.mockReturnValue("I am a mock!");
+console.log(mockFn()); // I am a mock!
+
+mockFn.mockResolvedValue("I will be a mock!");
+mockFn().then((result) => {
+  console.log(result); // I will be a mock!
+});
+
+//콜백함수를 구현한 부분
+mockFn.mockImplementation((name) => `I am ${name}!`);
+console.log(mockFn("Dale")); // I am Dale!
+
+
+mockFn(["b", "c"]);
+expect(mockFn).toBeCalledWith(["b", "c"]);
+
+~~~
+
+## jest.spyOn()
+jest.fn()과 비슷하게 기능하지만, 실제로 call을 수행한다.
+
+~~~ js
+
+const calculator = {
+  add: (a, b) => a + b,
+};
+
+const spyFn = jest.spyOn(calculator, "add");
+
+const result = calculator.add(2, 3);
+
+expect(spyFn).toBeCalledTimes(1);
+expect(spyFn).toBeCalledWith(2, 3);
+expect(result).toBe(5);
+
+~~~
+
+## API mocking call
+일정한 결과 리턴하는 Mocking
+~~~ js
+
+const axios = require("axios");
+const userService = require("./userService");
+
+test("findOne returns what axios get returns", async () => {
+  axios.get = jest.fn().mockResolvedValue({
+    data: {
+      id: 1,
+      name: "Dale Seo",
+    },
+  }); //안정적으로 결과를 리턴하도록 mocking한다.
+
+  const user = await userService.findOne(1);
+  expect(user).toHaveProperty("id", 1);
+  expect(user).toHaveProperty("name", "Dale Seo");
+});
+~~~
+
+API를 실제로 call하면서 테스트 수행
+
+~~~ js
+
+const axios = require("axios");
+const userService = require("./userService");
+
+test("findOne fetches data from the API endpoint", async () => {
+  const spyGet = jest.spyOn(axios, "get");
+  await userService.findOne(1);
+  expect(spyGet).toBeCalledTimes(1);
+  expect(spyGet).toBeCalledWith(`https://jsonplaceholder.typicode.com/users/1`);
+});
+
+~~~
+
+
+
+
