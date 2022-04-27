@@ -234,3 +234,60 @@ console.log(result); //5050
 ~~~
 
 둘은 결과는 같지만, 범용으로 사용되는 함수를 재사용하느냐의 여부 차이가 있다.
+
+# 가변 인수 함수와 순수함수
+함수를 호출할 때 전달하는 인수의 개수를 제한하지 않는 것을 **가변 인수** 라고 한다. 매개변수에 ...을 붙여서 사용한다.
+
+~~~ typescript
+//mergeArray.ts
+//readonly로 설정하면, 순수함수의 특징을 유지
+export const mergeArray = <T>(...arrays: readonly T[][]):T[]=>{
+    let result : T[] = [];
+    
+    for(let index = 0; index < arrays.length;++index){
+        const array : T[] = arrays[index];
+        result = [...result,...array];
+    }
+    return result;
+}
+
+//app.ts
+import { mergeArray } from "./mergeArray";
+
+const numArray1: number[] = [1,2,3,4,5];
+const numArray2: number[] = [6,7,8,8,9];
+
+const mergeArr = mergeArray(numArray1,numArray2);
+console.log(mergeArr); //1,2,3,4,5,6,7,8,8,9
+
+const numArray1: number[][] = [[1],[2],[4,5,7,8]];
+const numArray2: number[][] = [[6],[7],[2,3,4,5]];
+
+const mergeArr = mergeArray(numArray1,numArray2);
+console.log(mergeArr);
+//[ [ 1 ], [ 2 ], [ 4, 5, 7, 8 ], [ 6 ], [ 7 ], [ 2, 3, 4, 5 ] ]
+
+~~~
+arrays 파라미터 배열안에 전달할 배열이 두개 들어가고, 만약 
+해당 배열의 인수가 배열이라면, 배열이 const array :T[]에 들어간다.
+![샘플](/assets/img/0423/02.png)
+
+# 튜플
+JS에선 튜플이 없다. 단순히 배열의 한 종류로 취급된다.
+타입스크립트에서 튜플을 사용할 때는 타입 별칭으로 튜플의 의미를 명확하게 한다. 비구조화 할당도 가능하다.
+
+~~~ typescript
+type ResultType = [boolean, string];
+
+const doSomething = (): ResultType =>{
+    try{
+        throw new Error(`Some error occurs....`);
+    }catch(e:any){
+        return [false, e.message]
+    };
+};
+
+const [result, errorMessage] = doSomething();
+console.log(result, errorMessage); //error Some error occurs....
+~~~
+
