@@ -1,0 +1,85 @@
+---
+layout: post
+title:  "Pug" 
+date:   2022-04-28 22:30:00 +0900
+categories: dev
+---
+
+# 들어가면서
+새로 들어가는 부서가 html 대신 pug를 사용한다하여, 정리해본다. pug는 이전에 jade가 이름이 바뀐 것이다. 예전엔 ejs같은 템플릿 엔진들이 express안에 내장되어 있었던 시대가 있었는데, 요즘엔 따로 라이브러리를 적용해야 된다고 한다. 구 jade인 pug에 대해서 문법을 간략하게 정리해본다.
+
+# Typescript Express Pug 세팅
+타입스크립트 상에서 Express.js 프레임워크의 Pug를 설치해보겠다.
+
+~~~ shell
+> npm i --save @types/express express nodemon pug ts-node @types/node typescript
+~~~
+
+package.json 세팅
+~~~ json
+  "scripts": {
+    "start": "nodemon --exec ts-node src/app.ts"
+  }
+~~~
+하기 코드는 express view 엔진을 pug로 세팅하고, view를 보여줄 path 디렉토리를 template으로 설정한 것이다. nodemon으로 설정하면서, 실시간으로 코드가 바뀔때마다 서버로 업데이트한다.
+
+src/app.ts 
+~~~ typescript
+
+import express, { Request, Response, NextFunction } from 'express';
+import path from 'path';
+
+const app = express();
+app.set('view engine', 'pug');
+app.set('views',path.join(__dirname,'template'));
+app.use(express.static(path.join(__dirname,'template')));
+
+const port = 8081;
+
+app.get('/',(req:Request, res:Response,next:NextFunction)=>{
+    res.render('index');
+});
+
+app.listen(port,()=>{
+    console.log(`server is running on port : ${port}`);
+});
+
+~~~
+
+![샘플](/assets/img/0428/01.png)
+
+# pug 문법
+pug에서 가장 중요한 것은 들여쓰기이다. 그리고 태그를 닫는 부분이 없고, 들여쓰기 한 이후 공백까지가 태그가 된다.
+태그 사이에 속성값을 넣으려면 소괄호를 넣는다. 여러줄 입력할땐 |을 쓰고, #은 id .은 class를 지정한다.
+
+script와 style을 사용하고나선 .을 찍는다.
+
+~~~ pug
+
+doctype
+html(lang='en')
+    head 
+        title Pug 
+    script(type='text/javascript').
+        foo = true;
+        var bar = function (param) {
+            console.log(param)
+        };
+        if (foo) {
+            bar(1 + 5)
+        }
+    style(type='text/css').
+        .user {
+            background-color : #efefef;
+        }
+    body 
+        h1 Pug - node template engin 
+        #container.col 
+          p You are amazing
+          div thank you 
+                div thank you2
+        .user 
+            p call me baby
+~~~
+실제로 서버 상에선 html로 변환되어 렌더링된다. 
+![샘플](/assets/img/0428/02.png)
