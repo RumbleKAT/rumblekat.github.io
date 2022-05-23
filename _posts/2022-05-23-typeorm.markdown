@@ -1,0 +1,277 @@
+---
+layout: post
+title:  "TypeORM" 
+date:   2022-05-23 21:20:00 +0900
+categories: dev
+---
+
+# 들어가면서
+ORM이란 객체와 DB에 있는 데이터를 일치시켜주는 도구이다. 객체의 CRUD에 따라 자동으로 SQL을 생성하여 동기화시켜주는다.
+그동안 JPA를 공부하면서, ORM을 써봤었는데 Typescript상에도 ORM이 있다고 하여 하나씩 파헤쳐 보려고 한다.
+
+![샘플](https://github.com/typeorm/typeorm/raw/master/resources/logo_big.png)
+
+# TypeORM이란?
+NodeJS, Browser, Cordova, PhoneGap, Ionic, React Native, NativeScript, Expo, and Electron platforms  TypeScript and JavaScript (ES5, ES6, ES7, ES8)플랫폼에서 돌릴 수 있는 ORM이다. 최신 JS 특징과 여러 DB 관련 추가적인 개발을 도와줄 기능들을 제공한다.  
+
+Typeorm은 **Active Record**와 **Data Mapper**를 지원한다.
+(Hibernate에 영향을 받았다.)
+
+# Active Record Pattern
+모델 자체 내에서 모든 쿼리 메서드를 정의하고 모델 메서드를 사용하여 개체를 저장, 제거 및 로드합니다.
+
+간단히 말해, 활성 레코드 패턴은 모델 내에서 데이터베이스에 액세스하기 위한 접근 방식입니다.
+
+~~~ typescript
+
+import { BaseEntity, Entity, PrimaryGeneratedColumn, Column } from "typeorm"
+
+@Entity()
+export class User extends BaseEntity {
+    @PrimaryGeneratedColumn()
+    id: number
+
+    @Column()
+    firstName: string
+
+    @Column()
+    lastName: string
+
+    @Column()
+    isActive: boolean
+}
+
+~~~
+
+모든 활성 레코드 엔티티는 엔티티와 함께 작동하는 메서드를 제공하는 BaseEntity 클래스를 확장해야 합니다.
+
+~~~ typescript
+
+import { BaseEntity, Entity, PrimaryGeneratedColumn, Column } from "typeorm"
+
+@Entity()
+export class User extends BaseEntity {
+    @PrimaryGeneratedColumn()
+    id: number
+
+    @Column()
+    firstName: string
+
+    @Column()
+    lastName: string
+
+    @Column()
+    isActive: boolean
+
+    static findByName(firstName: string, lastName: string) {
+        return this.createQueryBuilder("user")
+            .where("user.firstName = :firstName", { firstName })
+            .andWhere("user.lastName = :lastName", { lastName })
+            .getMany()
+    }
+}
+
+const timber = await User.findByName("Timber", "Saw")
+~~~
+
+
+# Data Mapper Pattern
+Data Mapper 접근 방식을 사용하면 "리포지토리"라는 별도의 클래스에 모든 쿼리 메서드를 정의하고 리포지토리를 사용하여 개체를 저장, 제거 및 로드합니다. 데이터 맵퍼에서 엔티티는 매우 멍청합니다. 엔티티는 속성을 정의할 뿐 아니라 일부 "더미" 메서드를 사용할 수도 있습니다.
+
+간단히 말해, 데이터 매퍼는 모델 대신 리포지토리 내에서 데이터베이스에 액세스하는 접근 방식입니다.
+== Repository pattern
+
+~~~ typescript
+const userRepository = dataSource.getRepository(User)
+
+// example how to save DM entity
+const user = new User()
+user.firstName = "Timber"
+user.lastName = "Saw"
+user.isActive = true
+await userRepository.save(user)
+
+// example how to remove DM entity
+await userRepository.remove(user)
+
+// example how to load DM entities
+const users = await userRepository.find({ skip: 2, take: 5 })
+const newUsers = await userRepository.findBy({ isActive: true })
+const timber = await userRepository.findOneBy({
+    firstName: "Timber",
+    lastName: "Saw",
+})
+
+~~~
+
+Data Mapper 접근 방식은 유지보수를 지원하므로 대형 앱에서 더 효과적입니다. 액티브 레코드 접근 방식은 소규모 앱에서 잘 작동하는 단순성을 유지하는 데 도움이 된다. 또한 단순성은 항상 유지보수를 개선하는 열쇠입니다.
+
+# Quick Start
+
+~~~ shell
+> npx typeorm init --name testORM --database mysql
+~~~
+
+~~~
+MyProject
+├── src                   // place of your TypeScript code
+│   ├── entity            // place where your entities (database models) are stored
+│   │   └── User.ts       // sample entity
+│   ├── migration         // place where your migrations are stored
+│   ├── data-source.ts    // data source and all connection configuration
+│   └── index.ts          // start point of your application
+├── .gitignore            // standard gitignore file
+├── package.json          // node module dependencies
+├── README.md             // simple readme file
+└── tsconfig.json         // TypeScript compiler options
+~~~
+
+![샘플](/assets/img/0523/01.png)
+
+mysql을 사용할때 패스워드 설정을 추가로 해야한다. / 아니면 mysql2 라이브러리를 사용하면 된다.
+~~~ shell
+> ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
+> flush privileges;
+~~~
+
+# Entity
+Entity를 생성하는 것은 JPA와 상당히 유사하다. Entity 에노테이션을 추가하고, 컬럼, primary 설정, autoincrement 등 보통 ORM에서 제공하는 것들은 기본적으로 다 제공한다.
+
+~~~ typescript
+//Photo.ts
+
+import { Entity, Column, PrimaryGeneratedColumn } from "typeorm"
+
+@Entity()
+export class Photo{
+    @PrimaryGeneratedColumn()
+    id : number
+
+    @Column({
+        length : 100,
+    })
+    name : string
+    
+    @Column("text")
+    description : string
+    
+    @Column()
+    filename : string
+    
+    @Column("double") //타입 및 길이 지정
+    views : number
+    
+    @Column()
+    isPublished : boolean
+}
+
+//data-source.ts
+import "reflect-metadata"
+import { DataSource } from "typeorm"
+import { Photo } from "./entity/Photo"
+// import { User } from "./entity/User"
+
+export const AppDataSource = new DataSource({
+    type: "mysql",
+    host: "127.0.0.1",
+    port: 3306,
+    username: "root",
+    password: "password",
+    database: "database",
+    synchronize: true,
+    logging: false,
+    entities: [Photo],
+    migrations: [],
+    subscribers: [],
+})
+
+import { AppDataSource } from "./data-source"
+import { Photo } from "./entity/Photo"
+// import { User } from "./entity/User"
+
+AppDataSource.initialize().then(async () => {
+    const photo = new Photo()
+    photo.name = "Me and Bears2"
+    photo.description = "I am near polar bears2"
+    photo.filename = "photo-with-bears2.jpg"
+    photo.views = 1
+    photo.isPublished = true
+    
+    const photoRepository = AppDataSource.getRepository(Photo);
+    await photoRepository.save(photo);
+
+    const savedPhotos = await photoRepository.find();
+    console.log("All photos from the db: ", savedPhotos);
+
+    // const savedPhotos = await AppDataSource.manager.find(Photo);
+    // console.log('All photos from the db: ', savedPhotos);
+
+
+}).catch(error => console.log(error))
+
+~~~
+
+# MySql에서 확인
+~~~ 
+mysql> describe photo;
++-------------+--------------+------+-----+---------+----------------+
+| Field       | Type         | Null | Key | Default | Extra          |
++-------------+--------------+------+-----+---------+----------------+
+| id          | int          | NO   | PRI | NULL    | auto_increment |
+| name        | varchar(100) | NO   |     | NULL    |                |
+| description | text         | NO   |     | NULL    |                |
+| filename    | varchar(255) | NO   |     | NULL    |                |
+| views       | double       | NO   |     | NULL    |                |
+| isPublished | tinyint      | NO   |     | NULL    |                |
++-------------+--------------+------+-----+---------+----------------+
+6 rows in set (0.00 sec)
+
+mysql> select * from photo;
++----+--------------+-----------------------+----------------------+-------+-------------+
+| id | name         | description           | filename             | views | isPublished |
++----+--------------+-----------------------+----------------------+-------+-------------+
+|  1 | Me and Bears | I am near polar bears | photo-with-bears.jpg |     1 |           1 |
++----+--------------+-----------------------+----------------------+-------+-------------+
+1 row in set (0.00 sec)
+
+~~~
+
+# EntityManager
+엔티티 매니저를 사용하면 어느 앤티티이든 조작할수있다. EntityManager를 사용하여 모든 엔터티를 관리(삽입, 업데이트, 삭제, 로드 등)할 수 있습니다. EntityManager는 단일 장소에 있는 모든 엔터티 저장소의 모음과 같습니다.
+DataSource를 통해 엔터티 관리자에 액세스할 수 있습니다.
+~~~ typescript
+import { Photo } from "./entity/Photo"
+import { AppDataSource } from "./index"
+
+const savedPhotos = await AppDataSource.manager.find(Photo)
+console.log("All photos from the db: ", savedPhotos)
+~~~
+
+# Repository
+각 엔터티에는 엔터티에 대한 모든 작업을 처리하는 자체 저장소가 있습니다. 엔티티를 많이 다룰 때 EntityManager보다 Repositories를 사용하는 것이 더 편리합니다.
+
+~~~ typescript
+
+import { Photo } from "./entity/Photo"
+import { AppDataSource } from "./index"
+
+const photo = new Photo()
+photo.name = "Me and Bears"
+photo.description = "I am near polar bears"
+photo.filename = "photo-with-bears.jpg"
+photo.views = 1
+photo.isPublished = true
+
+const photoRepository = AppDataSource.getRepository(Photo)
+
+await photoRepository.save(photo)
+console.log("Photo has been saved")
+
+const savedPhotos = await photoRepository.find()
+console.log("All photos from the db: ", savedPhotos)
+
+~~~
+
+
+
+
