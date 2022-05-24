@@ -1,0 +1,215 @@
+---
+layout: post
+title:  "TypeORM #2" 
+date:   2022-05-24 20:40:00 +0900
+categories: dev
+---
+
+# Logging 세팅
+TypeORM에선 Logging 기능을 제공한다. 이는 JPA에서 사용하던 **show-sql: true** 설정과 비슷하다. 여태까지 ORM에서 수행될때 사용되는 모든 쿼리들을 한번에 보여준다.
+
+# Logging 설정하기 
+초기 default 세팅은 logging : false이지만, 이를 true로 바꾸면 아래와 같은 쿼리들을 한번에 볼 수 있다.
+~~~ json
+{
+    name: "mysql",
+    type: "mysql",
+    host: "localhost",
+    port: 3306,
+    username: "test",
+    password: "test",
+    database: "test",
+    ...
+    logging: true
+}
+~~~
+
+![샘플](/assets/img/0524/01.png)
+
+하지만 Hibernate와는 다르게 모든 쿼리를 다 보여주고 있어서 가독성을 조금 해칠수있다. 이에 6가지 옵션을 제공한다.
+
+* query - logs all queries.
+* error - logs all failed queries and errors.
+* schema - logs the schema build process.
+* warn - logs internal orm warnings.
+* info - logs internal orm informative messages.
+* log - logs internal orm log messages.
+
+# Log Long-running queries
+성능의 이슈를 느낄때 사용할 수 있는 옵션이다. 1초 이상 걸리는 쿼리만 보여주는 옵션
+~~~ json 
+{
+    host: "localhost",
+    ...
+    maxQueryExecutionTime: 1000
+}
+~~~
+
+# logger file 만들기
+하기 옵션 설정시, 모든 쿼리 로깅을 ormlogs.log 파일에 저장한다.
+~~~ json
+{
+    host: "localhost",
+    ...
+    logging: true,
+    logger: "file"
+}
+~~~
+
+![샘플](/assets/img/0524/02.png)
+
+# Custom Logger 만들기
+
+logger 설정을 file이 아니라, Logger 인터페이스를 상속받아 커스터마이징도 가능하다.
+
+~~~ typescript
+
+import { Logger, QueryRunner } from "typeorm";
+
+export class MyCustomLogger implements Logger{
+    logQuery(query: string, parameters?: any[], queryRunner?: QueryRunner) {
+        console.log(`query is ${query}`);
+        // throw new Error("Method not implemented.");
+    }
+    logQueryError(error: string | Error, query: string, parameters?: any[], queryRunner?: QueryRunner) {
+        throw new Error("Method not implemented.");
+    }
+    logQuerySlow(time: number, query: string, parameters?: any[], queryRunner?: QueryRunner) {
+        throw new Error("Method not implemented.");
+    }
+    logSchemaBuild(message: string, queryRunner?: QueryRunner) {
+        throw new Error("Method not implemented.");
+    }
+    logMigration(message: string, queryRunner?: QueryRunner) {
+        throw new Error("Method not implemented.");
+    }
+    log(level: "warn" | "info" | "log", message: any, queryRunner?: QueryRunner) {
+        throw new Error("Method not implemented.");
+    }
+
+}
+
+//data-source.ts
+
+import { DataSource } from "typeorm"
+import { MyCustomLogger } from "./logger/MyCustomLogger"
+
+const dataSource = new DataSource({
+    name: "mysql",
+    type: "mysql",
+    host: "localhost",
+    port: 3306,
+    username: "test",
+    password: "test",
+    database: "test",
+    logger: new MyCustomLogger(),
+})
+
+~~~
+
+![샘플](/assets/img/0524/03.png)
+
+# Repository Save의 동작과 upsert()
+> 참고링크 https://seungtaek-overflow.tistory.com/11?category=985684
+
+처음 데이터를 생성할땐, INSERT INTO로 데이터가 들어간다. 하지만, 해당 데이터를 수정하고 다시 SAVE를 할땐, 먼저 Select를 이용해서 id로 조회한 후에, 레코드가 존재하면 변경된 컬럼에 대해 Update 쿼리를 수행한다... **즉 비효율적이다** 
+
+~~~ typescript
+//User.ts
+import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @Column({
+    default: true,
+    name: 'is_active',
+  })
+  isActive: boolean;
+  
+  static create(name: string, isActive = false) {
+    const user = new User();
+    user.name = name;
+    user.isActive = isActive;
+    return user;
+  }
+
+  disable() {
+    this.isActive = false;
+  }
+}
+
+//index.ts
+import { AppDataSource } from "./data-source"
+import { Photo } from "./entity/Photo"
+import { User } from "./entity/User"
+
+AppDataSource.initialize().then(async () => {
+    const userRepository = AppDataSource.getRepository(User);
+    const user = User.create("user_1");
+    await userRepository.save(user);
+
+}).catch(error => console.log(error))
+
+~~~
+
+~~~
+query: START TRANSACTION
+query: INSERT INTO `user`(`id`, `name`, `is_active`) VALUES (DEFAULT, ?, ?) -- PARAMETERS: ["user_1",0]
+query: SELECT `User`.`id` AS `User_id`, `User`.`is_active` AS `User_is_active` FROM `user` `User` WHERE `User`.`id` = ? -- PARAMETERS: [2]
+query: COMMIT
+~~~
+## update 부분
+~~~ typescript
+import { AppDataSource } from "./data-source"
+import { Photo } from "./entity/Photo"
+import { User } from "./entity/User"
+
+AppDataSource.initialize().then(async () => {
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOneBy({ id : 2 });
+    user.isActive = true;
+    await userRepository.save(user);
+
+}).catch(error => console.log(error))
+
+~~~
+
+~~~
+query: SELECT `User`.`id` AS `User_id`, `User`.`name` AS `User_name`, `User`.`is_active` AS `User_is_active` FROM `user` `User` WHERE (`User`.`id` = ?) LIMIT 1 -- PARAMETERS: [2]
+query: SELECT `User`.`id` AS `User_id`, `User`.`name` AS `User_name`, `User`.`is_active` AS `User_is_active` FROM `user` `User` WHERE `User`.`id` IN (?) -- PARAMETERS: [2]
+query: START TRANSACTION
+query: UPDATE `user` SET `is_active` = ? WHERE `id` IN (?) -- PARAMETERS: [1,2]
+query: COMMIT
+~~~
+
+# Repository.upsert()
+레코드가 존재한다면 업데이트를, 존재하지 않는다면 생성을 실행하는 것을 한 번의 쿼리로 해결하는 매서드이다. (postgresql에서는 9.5버전부터 가능하다고 한다....)
+~~~ SQL
+INSERT INTO "user"(id, "name", is_active)
+VALUES (2,"user2", false)
+ON CONFILICT (id)
+DO UPDATE SET "name"='user2', is_active=FALSE 
+~~~
+
+~~~ typescript
+AppDataSource.initialize().then(async () => {
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOneBy({ id : 2 });
+    user.isActive = false;
+    await userRepository.upsert(user,['id']);
+
+}).catch(error => console.log(error))
+~~~
+
+~~~
+query: INSERT INTO `user`(`id`, `name`, `is_active`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `id` = VALUES(`id`), `name` = VALUES(`name`), `is_active` = VALUES(`is_active`) -- PARAMETERS: [2,"user_1",0]
+query: SELECT `User`.`id` AS `User_id`, `User`.`is_active` AS `User_is_active` FROM `user` `User` WHERE `User`.`id` = ? -- PARAMETERS: [2]
+~~~
+
+여기서 중요한 점은 Mysql 환경에선 ON DUPLICATE KEY UPDATE 이 수행된다는 것이다. 이는 데이터 삽입시 Primary key나 Unique key가 중복되었을 경우, 지정한 데이터만 Update한다.
