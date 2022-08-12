@@ -1,0 +1,199 @@
+---
+layout: post
+title:  "OAuth 2.0" 
+date:   2022-08-12 22:00:00 +0900
+categories: dev
+---
+
+# OAuth란?
+OAuth는 인터넷 사용자들이 비밀번호를 제공하지 않고, 다른 웹사이트 상의 자신들의 정보에 대해 웹사이트나 애플리케이션의 접근 권한을 부여할 수 있는 공통적인 수단으로서 사용되는 개방형 표준.
+
+OAuth가 사용되기 전에는 외부 사이트와 인증 기반의 데이터를 연동할때 인증방식의 표준이 없었기 때문에, 기존의 아이디와 비밀번호를 사용하였는데, 이는 보안상 취약한 구조였다. 
+
+> 참고링크  https://wan-blog.tistory.com/20
+
+OAuth1.0에서 2.0의 차이점은 인증 절차가 간소화됨으로서 개발자들이 구현하기 더 쉬워졌고, Authorization server와 Resource 서버의 분리가 명시적으로 되었다.
+
+## 인증 절차 간소화
+- 기능의 단순화, 기능과 규모의 확장성 등을 지원하기 위해 만들어졌다.
+- OAuth2.0의 암호화는 https에 맡김으로써 복잡한 디지털 서명에 관한 로직을 요구하지 않아 구현 자체가 쉬워졌다.
+
+## Resource Server와 Authorization Server 서버의 분리
+- 커다란 서비스는 인증 서버를 분리하거나 다중화 할 수 있어야함.
+
+## 다양한 인증 방식(Grant_type)
+- Authorization Code Grant
+- Implicit Grant
+- Resource Owner Password Credentials Grant
+- Client Credentials Grant
+- Device Code Grant
+- Refresh Token Grant
+
+> 참고링크 https://wan-blog.tistory.com/20
+
+# 용어정리
+
+| 용어  | 설명  |
+|------------------------|------------------------------------|
+| Resource Owner  | 웹 서비스를 이용하려는 유저, 자원(개인정보)을 소유하는 자, 사용자  |
+| Client  | 자신 또는 개인이 만든 애플리케이션 서버  |
+| Authorization Server  | 권한을 부여해주는 서버  |
+| Resource Server | 사용자의 개인정보를 가지고 있는 애플리케이션 서버   |
+| Access Token  | 자원에 대한 접근 권한을 Resource Owner가 인가했음을 나타내는 자격증명  |
+| Refresh Token  | Client는 Authorization Server로 부터 Access token(비교적 짧은 만료기간)과 refresh token(비교적 긴 만료기간)을 함꼐 부여받고, 토큰 만료시 다시 로그인을 시도해야되는데, refresh token이 있다면 access token이 만료될때 refresh token을 통해 access token을 재발급 받아 재로그인을 줄인다.   |
+
+![payco oauth 인증사례](https://developers.payco.com/static/img/@img_guide2.jpg)
+
+즉, 사용자가 로그인을 하는 것이 아닌, 소셜 미디어로 로그인을 하는 경우, Client는 Resource Owner를 대신해 로그인하는데 필요한 정보를 Resource Server에서 얻어 서로 비교해 유효성을 판단한다.
+
+그러므로 Client는 2가지 단계를 가진다.
+
+1. Resource Owner로부터 허용 
+2. Resourec Server로 부터 Client 신원확인
+
+Client가 Resource Owner 입장에서 어떤 정보를 활용하고, 기능을 사용하려 하는지 모른다. 그렇기 때문에 동의를 하는 과정을 거친다.
+그리고 이를 확인하는 과정에서 **client를 구분하는 값(=code)**를 전달한다.
+
+![payco oauth 인증사례](https://image.toast.com/aaaadh/alpha/2017/techblog/5%282%29.png)
+
+> 참고자료 https://inpa.tistory.com/entry/WEB-%F0%9F%93%9A-OAuth-20-%EA%B0%9C%EB%85%90-%F0%9F%92%AF-%EC%A0%95%EB%A6%AC
+
+# 인증 방식 종류
+
+## 쿠키
+쿠키는 key value 형식의 문자열이다. 브라우저가 서버에 요청을 보내면, 서버는 클라이언트의 요청에 응답을 작성할떄 set-cookie에 담는다. 이후 요청을 보낼때 마다 요청 헤더의 Cookie에 담아서 보낸다.
+
+**예시**
+-> 식별된 클라이언트로 추천광고를 띄움
+-> JSession을 이용한 SSO를 수행한다.
+
+쿠키의 단점은 보안에 취약하다. 용량제한이 있어 많은 정보를 담을 수 없고 브라우저간 공유가 불가하다. 사이즈가 커지면 네트워크의 부하가 커진다.
+
+## 세션 인증
+세션은 클라이언트의 민감한 인증정보를 서버측에 저장하고 관리한다. 
+Key에 해당하는 Session ID와 이와 대응하는 Value로 구성된다. Value에는 세션 생성시간, 마지막 접근시간 및 User가 저장한 속성 등이 Map 형태로 저장된다.
+
+세션의 단점으로 세션 ID 자체를 탈취하여 클라이언트인척 위장할수 있다.
+요청이 많아지면 서버에 부하가 심해진다.
+
+## Token인증
+기존의 세션 기반인증은 DB에 세션정보를 가지고있고 이에 대한 IO가 일어나게되면서 많은 오버헤드가 발생한다. 토큰은 클라이언트에 저장되고, 토큰 자체에 데이터가 들어가 있어서 클라이언트에서 받아 위조되었는지 판별하면 된다. stateless한 장점
+
+단점으로 토큰 자체의 길이가 길어, 인증요청이 많아질수록 네트워크 부하가 심해질 수 있다. Payload 자체는 암호화되지 않아 유저의 중요정보는 담을수 없다.
+
+# JWT(JSON WEB TOKEN)
+인증에 필요한 정보들을 암호화시킨 JSON 토큰. JWT 기반 인증은 Http 헤더에 실어 서버가 클라이언트를 식별한다. 
+
+JWT는 Json 데이터를 Base64를 통해 인코딩하여 직렬화하고, 위변조 방지를 위해 개인키를 통한 전자서명도 들어있다.
+
+![JWT](https://cdn.auth0.com/blog/legacy-app-auth/legacy-app-auth-5.png)
+
+JWT는 .을 구분자로 나누어지는 세가지 문자열의 조합이고 header, payload, signature를 의미한다.
+
+Header 에는 JWT 에서 사용할 타입과 해시 알고리즘의 종류가 담겨있으며, Payload 는 서버에서 첨부한 사용자 권한 정보와 데이터가 담겨있다. 
+
+마지막으로 Signature 에는 Header, Payload 를 Base64 URL-safe Encode 를 한 이후 Header 에 명시된 해시함수를 적용하고, 개인키(Private Key)로 서명한 전자서명이 담겨있다.
+
+전자서명에는 비대칭 암호화 알고리즘을 사용하므로 암호화를 위한 키와 복호화를 위한 키가 다르다. 암호화(전자서명)에는 개인키를, 복호화(검증)에는 공개키를 사용한다.
+
+단점으론 특정 토큰을 강제로 만료시키기 어렵다..
+JWT는 토큰의 길이가 길어 인증 요청이 많아질수록 네트워크 부하가 심해진다.(Cognito..?)
+
+# JWT 인증 예시
+
+## JWT Component
+~~~ java
+
+@Component
+public class JWT {
+
+    static Logger log = LoggerFactory.getLogger(JWT.class);
+
+    // Jwt 토큰 유효성 검사
+    private static final String JWT_SECRET = "secretKey";
+    // 토큰 유효시간
+    public String createToken(Map<String,Object> payload, long expireTime){
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + expireTime);
+
+        String str = Jwts.builder()
+                .addClaims(payload)
+                .setExpiration(expiryDate)
+                .signWith(SignatureAlgorithm.HS256, JWT_SECRET)
+                .compact();
+        return str;
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            Jwts.parser().setSigningKey(JWT_SECRET).parseClaimsJws(token);
+            return true;
+        } catch (SignatureException ex) {
+            log.error("Invalid JWT signature");
+        } catch (MalformedJwtException ex) {
+            log.error("Invalid JWT token");
+        } catch (ExpiredJwtException ex) {
+            log.error("Expired JWT token");
+        } catch (UnsupportedJwtException ex) {
+            log.error("Unsupported JWT token");
+        } catch (IllegalArgumentException ex) {
+            log.error("JWT claims string is empty.");
+        }
+        return false;
+    }
+}
+
+~~~
+
+## JWT UnitTest File
+~~~ java
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        classes = OauthstudyApplication.class)
+@AutoConfigureMockMvc
+@EnableAutoConfiguration
+class JWTTest {
+
+    @Autowired
+    JWT jwt;
+
+    static Logger logger = LoggerFactory.getLogger(JWTTest.class);
+
+    @Test
+    void token_valid_success_case_test(){
+        //given
+        Map<String,Object> payload = new HashMap<>();
+        payload.put("username","rumblekat");
+        payload.put("company","sds");
+
+        //when
+        String token = jwt.createToken(payload, 1000);
+        logger.info(token);
+
+        //then
+        boolean isValid = jwt.validateToken(token);
+
+        assertThat(isValid).isTrue();
+    }
+
+    @Test
+    void token_valid_failure_case_test(){
+        //given
+        Map<String,Object> payload = new HashMap<>();
+        payload.put("username","rumblekat");
+        payload.put("company","sds");
+
+        //when
+        String token = jwt.createToken(payload, 1);
+        logger.info(token);
+
+        //then
+        boolean isValid = jwt.validateToken(token);
+
+        assertThat(isValid).isFalse();
+    }
+}
+~~~
+
+
+
