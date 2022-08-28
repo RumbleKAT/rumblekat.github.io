@@ -1,0 +1,204 @@
+---
+layout: post
+title:  "Mock Service Worker" 
+date:   2022-08-28 15:00:00 +0900
+categories: dev
+---
+
+# 서비스 워커란?
+서비스 워커는 웹 응용 프로그램, 브라우저, 그리고 (사용 가능한 경우) 네트워크 사이의 **프록시 서버** 역할을 한다. 서비스 워커는 출처와 경로에 대해 등록하는 이벤트 기반 워커로서 JavaScript 파일의 형태를 갖고 있다. 서비스 워커는 연관된 웹 페이지/사이트를 통제하여 탐색과 리소스 요청을 가로채 수정하고, 리소스를 굉장히 세부적으로 캐싱할 수 있다. 이를 통해 웹 앱이 어떤 상황에서 어떻게 동작해야 하는지 완벽하게 바꿀 수 있다. ***(제일 대표적인 상황은 네트워크를 사용하지 못할 때)***
+
+![service worker](https://miro.medium.com/proxy/1*oOcY2Gn-LVt1h-e9xOv5oA.jpeg)
+
+# 서비스 워커의 생명주기
+1. 다운로드
+2. 설치
+3. 활성화
+
+서비스 워커가 제어하는 사이트/페이지에 사용자가 처음 접근하는 순간 서비스 워커가 즉시 다운로드된다.
+
+서비스 워커의 업데이트는 아래의 경우에 발생한다.
+- 범위 내 페이지로의 탐색 발생
+- 서비스 워커에서 이벤트가 발생했는데, 서비스 워커를 이전 24시간 내에 다운로드하지 않은 경우
+
+다운로드한 파일이 더 새로운 버전인 경우 서비스 워커의 설치를 시도한다. 버전 비교는 기존 서비스 워커 파일과의 바이트 단위 비교 결과를 사용한다. 이 페이지/사이트에서 서비스 워커를 처음 발견한 경우에도 "새로운 버전"으로 취급한다.
+
+기존에 서비스 워커가 존재하던 경우, 새로운 버전을 백그라운드에서 설치하지만 활성화는 아직 하지 않는다. 이 시점의 워커를 **대기 중인 워커**라고 부른다. 대기 중인 워커는 이전 버전의 서비스 워커를 사용하는 페이지가 모두 닫힌 경우 활성화되어 **활성 워커**가 된다.
+
+> 출처 https://developer.mozilla.org/ko/docs/Web/API/Service_Worker_API
+
+# 서비스 워커의 활용예시
+
+1. 백그라운드 데이터 동기화.
+2. 다른 출처에서의 리소스 요청을 응답.
+3. 위치정보, 자이로 센서 등 계산에 높은 비용이 들어가는 다수의 페이지에서 함께 사용할 수 있도록 데이터 업데이트를 중앙화.
+4. 개발 목적으로서 CoffeeScript, Less, CJS/AMD 모듈 등의 의존성 관리와 컴파일.
+5. 백그라운드 서비스 훅.
+6. 특정 URL 패턴에 기반한 사용자 지정 템플릿 제공.
+7. 성능 향상. 사진 앨범의 다음 사진 몇 장처럼, 사용자가 필요로 할 것으로 생각되는 리소스의 프리페칭 등.
+8. 백그라운드 동기화: 아무 사용자도 사이트에 없을 때 서비스 워커를 가동해 캐시를 업데이트 하는 등의 작업을 수행.
+9. 푸시 메시지에 반응: 서비스 워커를 가동, 새로운 콘텐츠가 이용 가능하다는 메시지를 사용자에게 전송.
+10. 특정 시간과 날짜에 반응.
+11. 지오펜스 진입. (= 실제 지형에 구획된 가상의 반경)
+
+# Web Worker와 Service Worker
+
+## 공통점
+- 추가 스레드에서 실행되므로 메인 스레드를 블록하지 않고 실행될 수 있다.
+- Window나 Document 객체에 접근할 수 없어서 DOM과 직접적으로 interact 할 수 없고 browser API에 접근하는데 한정적이다.
+
+## 차이점
+- 서비스 워커는 fetch event와 같은 네트워크 요청을 탈취하거나 push event와 같은 Push API를 listen 할 수 있다.
+- 페이지는 여러개의 웹 워커를 생성할 수 있지만, 단일 서비스 워커는 등록된 scope내에서 모든 활성 탭을 제어한다.
+- 웹 워커의 수명은 자신이 속한 탭과 밀접하게 결합되는 반면, 서비스 워커의 수명은 독립적이다. 따라서 웹 워커가 실행중인 탭을 닫으면 워커가 종료되지만, 서비스 워커는 활성 탭이 열려있지 않아도 백그라운드에서 계속 실행될 수 있다.
+
+# Web worker
+웹 워커는 주로 UI block을 피하기 위해 무거운 연산이 소요되는 작업(AI, games, image encoding, etc)을 보조 스레드에서 실행하기 위해 사용된다.
+
+# Service worker
+서비스 워커는 일반적으로 네트워크 프록시 같은 역할이나 백그라운드 작업, 캐싱, 오프라인을 처리하는데 사용된다.
+
+> 참고자료
+
+# MSW 
+MSW(Mock Service Worker)는 서비스 워커(Service Worker)를 사용하여 네트워크 호출을 가로채는 API 모킹(mocking) 라이브러리
+
+비교적에 최근에 도입된 웹 표준 기술인 서비스 워커(Service Worker)를 사용하면 브라우저로 부터 나가는 요청이나 들어오는 응답을 중간에서 감시하거나 변조, 캐싱과 같은 기존에 웹에서 할 수 없었던 부가적인 작업들이 가능.
+
+![msw](https://github.com/mswjs/msw/raw/main/media/msw-logo.svg)
+
+MSW는 이러한 서비스 워커의 능력을 백분 활용하여 웹 개발에 있어서 API 모킹의 수준을 한 단계 올려놓았다고 평가받으며 출시되지 마자 큰 호응을 얻고 있다.
+
+## MSW를 이용한 개발 사례
+1. 백엔드 개발과 프론트가 동시에 이루어져야 하는 경우.
+2. 테스트를 실행 시 실제 백앤드 API에 네트워크 호출을 하는 대신에 훨씬 빠르고 안정적인 가짜 API 서버를 구축하기 위해.
+
+## MSW를 이용한 개발의 특징
+기존 API 모킹 라이브러리 대비 MSW의 가장 큰 강점은 모킹이 네트워크 단에서 일어나기 때문에 프런트앤드 코드를 실제 백앤드 API와 네트워크 통신하는 것과 크게 다르지 않게 작성할 수 있다. 
+
+즉, 가짜 API를 실제 API로 대체하는 것이 쉽다는 뜻이며 그만큼 프런트앤드 프로젝트의 개발 생산성이 올라가는 것을 의미.
+
+라이브러리가 상당히 유연하게 디자인이 되어 있어서 개발용으로 브라우저 환경에서 서비스 워커로 돌리든 테스트용으로 Node.js 환경에서 Jest나 Cypress와 같은 테스트 러너(runner)로 돌리든 동일한 요청 핸들러(handler) 코드를 공유해서 사용할 수 있다.
+
+REST API 모킹과 GraphQL API 모킹을 모두 지원.
+
+# MSW 개발 (feat vue)
+## 1. vue 프로젝트 생성
+~~~
+> vue create my-app
+~~~
+axios 라이브러리 설치
+~~~
+> npm install axios
+~~~
+msw 라이브러리 설치
+~~~
+> npm install msw
+~~~
+
+## 2. 모킹 서버 제외한 채 만들기
+여기까지 진행하면 message api가 존재하지 않기 때문에, 예외처리에 걸린다.
+
+/src/services/fetchers.js
+~~~ JavaScript
+import axios from 'axios'
+
+export const fetchMessage = async function (){
+  const response = await axios.get('/message');
+  return response.data.message;
+}
+~~~
+
+/src/App.vue
+~~~ JavaScript
+<template>
+  <p>{{ message }}</p>
+</template>
+
+<script>
+import { fetchMessage } from './services/fetchers'
+export default {
+  data(){
+    return {
+      message: "",
+    }
+  },
+  created(){
+    this.fetchData();
+  },
+  methods : {
+    async fetchData(){
+      try{
+        this.message = await fetchMessage();
+      }catch(e){
+        this.message = "server error";
+      }
+    }
+  }
+}
+</script>
+
+<style>
+
+</style>
+~~~
+
+## 3. mocking 관련 파일 만들기 
+
+### /src/mocks/handlers.js
+~~~ JavaScript
+import { rest } from 'msw'
+
+export default [
+  rest.get('/message', (req, res, ctx) => {
+    return res(
+      ctx.json({
+        message: 'it works and todo second things'
+      })
+    )
+  })
+]
+~~~
+
+### /src/mocks/browser.js
+~~~JavaScript
+import { setupWorker } from "msw";
+import handlers from "./handlers";
+
+export const worker = setupWorker(...handlers);
+~~~
+
+| Files    | Description                   |
+|----------|------------------------|
+| handlers.js       | mocking API 동작정의                  |
+| browser.js | handlers.js의 코드를 이용해, 서비스워커를 초기화 |
+
+brower.js에서 초기화 과정을 거치면, 클라이언트의 요청을 서버가 아닌 서비스 워커로 보내, Mock API에 지정한 리턴값을 받아올 수 있게 할 수 있다. (요청을 중간에 가로쳐 모의 api 응답값을 사용하도록 조작)
+
+### /src/main.js
+서비스 워커 초기화 
+~~~ JavaScript
+console.log(process.env.NODE_ENV);
+if(process.env.NODE_ENV === 'development'){
+    const { worker } = require('./mocks/browser');
+    worker.start();
+}
+~~~
+
+### public 디렉토리에 worker 스크립트 생성하기
+이 script는 http 요청을 가로채, 모의 서버에서 동작하도록 해준다.
+~~~ 
+npx msw init public/
+~~~
+
+### 디렉토리 
+![디렉토리](/assets/img/0828/0101.png)
+
+## 실행결과
+![디렉토리](/assets/img/0828/0102.png)
+
+참고로 위 mocking 서버의 경우 postman에서 실행하면 안나온다.
+
+
+
+
