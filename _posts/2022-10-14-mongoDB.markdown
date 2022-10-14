@@ -1,0 +1,259 @@
+---
+layout: post
+title:  "MongoDB #1" 
+date:   2022-10-14 23:40:00 +0900
+categories: dev
+---
+
+# MongoDB 란?
+몽고DB(MongoDB←HUMONGOUS)는 크로스 플랫폼 도큐먼트 지향 데이터베이스 시스템이다. NoSQL 데이터베이스로 분류되는 몽고DB는 JSON과 같은 동적 스키마형 도큐먼트들(몽고DB는 이러한 포맷을 BSON이라 부름)을 선호함에 따라 전통적인 테이블 기반 관계형 데이터베이스 구조의 사용을 삼간다.
+
+뉴욕시에 기반을 둔 회사인 10gen (현재의 몽고DB)에서 2007년 10월, 계획된 PaaS(서비스형 플랫폼) 제품의 구성 요소로 처음 개발하였으며 10gen이 상용 지원 및 기타 서비스를 제공한 2009년에 오픈 소스 개발 모델로 전향하였다. 그 뒤로 몽고DB는 크레이그리스트, 이베이, 포스퀘어, 소스포지, 뉴욕 타임즈, 구글, 페이스북와 같은 수많은 주요 웹사이트 및 서비스에 백엔드 소프트웨어로 채택되고 있다. 몽고DB는 가장 유명한 NoSQL 데이터베이스 시스템이다.
+
+MongoDB는 C++로 작성된 오픈소스 문서지향(Document-Oriented) 적 Cross-platform 데이터베이스이며, 뛰어난 확장성과 성능을 자랑한다.
+
+# No SQL ?
+진짜 의미는 Not Only SQL 입니다. 기존의 RDBMS의 한계를 극복하기 위해 만들어진 새로운 형태의 데이터저장소. 
+관계형 DB가 아니므로, RDMS처럼 고정된 스키마 및 JOIN 이 존재하지 않는다.
+
+| RDBMS    |  MongoDB |
+|----------|----------|
+| Database  |  Database |
+| Table  |  Collection |
+| Tuple / Row	  | Document  |
+|  Column | Key / Field  |
+| Table Join	  | Embedded Documents |
+| Primary Key	  | Primary Key (_id)  |
+| mysqld  |  mongod |
+| mysql  | mongo  |
+
+> 장점
+
+- Schema-less (Schema가 없다. 같은 Collection 안에 있을지라도 다른 Schema를 가지고 있을 수 있다)
+- 각 객체의 구조가 뚜렷하다
+- 복잡한 JOIN 이 없다.
+- Deep Query ability (문서지향적 Query Language 를 사용하여 SQL 만큼 강력한 Query 성능을 제공한다.
+- 어플리케이션에서 사용되는 객체를 데이터베이스에 추가 할 때 Conversion / Mapping이 불필요하다.
+- 일관성이 중요한 시스템 아니면, 속도가 빠르고 쓸만하다. 
+
+# 주요기능
+1. 몽고DB는 필드, 레인지 쿼리, 정규 표현식 검색을 지원한다.
+2. 색인, 몽고DB 도큐먼트의 필드는 프라이머리(primary) 인덱스와 세컨더리(secondary) 인덱스로 인덱싱할 수 있다.
+3. 몽고DB는 리플리카 세트(replica set)와 함께 고가용성을 제공한다. 리플리카 세트는 둘 이상의 데이터 사본으로 구성된다. 각 리플리카 세트 멤버는 어느 시점에서나 프라이머리나 세컨더리 리플리카 역할을 수행할 수 있다. 모든 쓰기와 읽기는 기본값으로 프라이머리 리플리카에서 수행된다. 세컨더리 리플리카는 내장된 리플리케이션 기능을 사용하여 프라이머리의 데이터의 사본을 관리한다. 프라이머리 리플리카가 실패하면 리플리카 세트는 어느 세컨더리가 프라이머리가 되면 좋을지 결정하기 위해 선거 과정을 자동으로 수행한다. 세컨더리 리플리카들은 선택적으로 읽기 조작을 서비스할 수 있으나 해당 데이터는 기본적으로 일관성을 유지한다.
+
+4. 몽고DB는 샤딩을 사용하여 수평으로 스케일링한다. 사용자는 컬렉션 안의 데이터의 배포 방식을 결정하는 샤드 키를 선택하게 된다. 데이터는 여러 레인지(샤드 키에 따라)로 분리되며 여러 샤드로 배포된다. (샤드는 하나 이상의 리플리카가 존재하는 마스터이다)
+
+5. 몽고DB는 파일 저장을 위해 여러 머신에 로드 밸런싱, 데이터 리플리케이션 기능과 더불어 GridFS라는 이름의 파일 시스템으로 사용할 수 있다.
+이 기능은 그리드 파일 시스템이라고 부르며 몽고DB 드라이버에 포함되어 있다. 
+
+6. 멀티 도큐먼트 ACID 트랜잭션 지원이 2018년 6월 4.0 릴리스의 GA(General Availability)와 더불어 몽고DB에 추가되었다.
+
+# Mongoose 
+ODM(Object Document Mapping) : 객체와 문서를 1대 1로 매칭해주는 역할
+
+![Mongoose](https://upload.wikimedia.org/wikipedia/commons/4/40/Mongoose_works_as_an_intermediate_library_between_MongoDB_and_Express.png)
+
+# Schema 예시
+
+## HomeDetail.schema.ts
+~~~ typescript
+
+import { Schema } from 'mongoose';
+import {IHomeDetail} from "~/server/model/IHomeDetail";
+
+export const homeDetailSchema = new Schema<IHomeDetail>({
+    ETC_HSHLDCO : { type: Number },
+    HOUSE_MANAGE_NO : { type: Number },
+    HOUSE_TY : { type: String },
+    INSTT_RECOMEND_HSHLDCO : { type: Number },
+    LFE_FRST_HSHLDCO : { type: Number },
+    LTTOT_TOP_AMOUNT : { type: String },
+    MNYCH_HSHLDCO : { type: Number },
+    MODEL_NO : { type: String },
+    NWWDS_HSHLDCO : { type: Number },
+    OLD_PARNTS_SUPORT_HSHLDCO : { type: Number },
+    PBLANC_NO : { type: Number },
+    SPSPLY_HSHLDCO : { type: Number },
+    SUPLY_AR : { type: String },
+    SUPLY_HSHLDCO : { type: String },
+    TRANSR_INSTT_ENFSN_HSHLDCO : { type: Number },
+    EXCLUSE_AR : { type: Number },
+    GP : { type: String },
+    SUBSCRPT_REQST_AMOUNT : { type: Number },
+    SUPLY_AMOUNT : { type: String },
+    TP : { type: String }
+});
+
+~~~
+
+## HomeDetail.schema.ts
+~~~ typescript
+import { Schema, model } from 'mongoose';
+import {IHomeApply} from "~/server/model/IHomeApply";
+import {homeDetailSchema} from "./HomeDetail.schema";
+import {HomeRateSchema} from "./HomeRate.schema";
+
+const homeSchema = new Schema({
+    HOUSE_MANAGE_NO : { type: Number, required: true, unique: true, index: true },
+    PBLANC_NO: { type: Number },
+    HOUSE_NM: { type: String },
+    HOUSE_SECD: { type: String },
+    HOUSE_SECD_NM: { type: String },
+    HOUSE_DTL_SECD: { type: String },
+    HOUSE_DTL_SECD_NM: { type: String },
+    RENT_SECD: { type: String },
+    RENT_SECD_NM: { type: String },
+    SUBSCRPT_AREA_CODE: { type: String },
+    SUBSCRPT_AREA_CODE_NM: { type: String },
+    HSSPLY_ZIP: { type: String },
+    HSSPLY_ADRES: { type: String },
+    TOT_SUPLY_HSHLDCO: { type: Number },
+    RCRIT_PBLANC_DE: { type: String },
+    RCEPT_BGNDE: { type: Date },
+    RCEPT_ENDDE: { type: Date },
+    SPSPLY_RCEPT_BGNDE: { type: String },
+    SPSPLY_RCEPT_ENDDE: { type: String },
+    GNRL_RNK1_CRSPAREA_RCEPT_PD: { type: String },
+    GNRL_RNK1_ETC_GG_RCPTDE_PD: { type: String },
+    GNRL_RNK1_ETC_AREA_RCPTDE_PD: { type: String },
+    GNRL_RNK2_CRSPAREA_RCEPT_PD: { type: String },
+    GNRL_RNK2_ETC_GG_RCPTDE_PD: { type: String },
+    GNRL_RNK2_ETC_AREA_RCPTDE_PD: { type: String },
+    PRZWNER_PRESNATN_DE: { type: String },
+    CNTRCT_CNCLS_BGNDE: { type: String },
+    CNTRCT_CNCLS_ENDDE: { type: String },
+    HMPG_ADRES: { type: String },
+    CNSTRCT_ENTRPS_NM: { type: String },
+    MDHS_TELNO: { type: String },
+    BSNS_MBY_NM: { type: String },
+    MVN_PREARNGE_YM: { type: String },
+    SPECLT_RDN_EARTH_AT: { type: String },
+    MDAT_TRGET_AREA_SECD: { type: String },
+    PARCPRC_ULS_AT: { type: String },
+    IMPRMN_BSNS_AT: { type: String },
+    PUBLIC_HOUSE_EARTH_AT: { type: String },
+    LRSCL_BLDLND_AT: { type: String },
+    NPLN_PRVOPR_PUBLIC_HOUSE_AT: { type: String },
+    SEARCH_HOUSE_SECD: { type: String },
+    GNRL_RCEPT_BGNDE: { type: String },
+    GNRL_RCEPT_ENDDE: { type: String },
+    MODEL_NO: { type: String },
+    HOUSE_TY: { type: String },
+    SUPLY_AR: { type: String },
+    SUPLY_HSHLDCO: { type: Number },
+    SPSPLY_HSHLDCO: { type: Number },
+    MNYCH_HSHLDCO: { type: Number },
+    NWWDS_HSHLDCO: { type: Number },
+    LFE_FRST_HSHLDCO: { type: Number },
+    OLD_PARNTS_SUPORT_HSHLDCO: { type: Number },
+    INSTT_RECOMEND_HSHLDCO: { type: Number },
+    ETC_HSHLDCO: { type: Number },
+    TRANSR_INSTT_ENFSN_HSHLDCO: { type: Number },
+    LTTOT_TOP_AMOUNT: { type: String },
+    GP: { type: String },
+    TP: { type: String },
+    EXCLUSE_AR: { type: Number },
+    SUPLY_AMOUNT: { type: String },
+    SUBSCRPT_REQST_AMOUNT: { type: String },
+    SUBSCRPT_RANK_CODE: { type: Number },
+    RESIDE_SECD: { type: String },
+    RESIDE_SENM: { type: String },
+    LWET_SCORE: { type: Number },
+    TOP_SCORE: { type: Number },
+    AVRG_SCORE: { type: Number },
+    RESIDNT_PRIOR_AT: { type: String },
+    RESIDNT_PRIOR_SENM: { type: String },
+    SPSPLY_KND_CODE: { type: String },
+    SPSPLY_KND_NM: { type: String },
+    SPSPLY_KND_HSHLDCO: { type: Number },
+    NORMAL_HSHLDCO: { type: Number },
+    NORMAL_REQ_CNT: { type: String },
+    MNYCH_REQ_CNT: { type: String },
+    NWWDS_REQ_CNT: { type: String },
+    LFE_FRST_REQ_CNT: { type: String },
+    OLD_PARNTS_SUPORT_REQ_CNT: { type: String },
+    INSTT_RECOMEND_REQ_CNT: { type: String },
+    NORMAL_CMPET_RATE: { type: String },
+    MNYCH_CMPET_RATE: { type: String },
+    NWWDS_CMPET_RATE: { type: String },
+    LFE_FRST_CMPET_RATE: { type: String },
+    OLD_PARNTS_SUPORT_CMPET_RATE: { type: String },
+    INSTT_RECOMEND_CMPET_RATE: { type: String },
+    REMNDR_HSHLD_PBLANC_TYCD: { type: String },
+    REQ_CNT: { type: String },
+    CMPET_RATE: { type: String },
+    SUBSCRPT_RCEPT_BGNDE : {type : Date},
+    SUBSCRPT_RCEPT_ENDDE : {type : Date},
+    HOME_DETAILS : {
+        type: [homeDetailSchema],
+        default : []
+    },
+    HOME_RATES : {
+        type : [HomeRateSchema],
+        default : []
+    },
+    CATEGORY : {
+        type : String
+    },
+    CRDAT : {
+        type : Date
+    }
+})
+
+export const Home = model<IHomeApply>('HomeApply',homeSchema);
+
+~~~
+
+# Service Layer
+## HomeService.ts
+
+~~~ typescript
+
+import {Home} from "../model/schemas/Home.schema";
+
+export const isExistHome = async (HOUSE_MANAGE_NO: number) =>{
+    const result = await Home.find({ HOUSE_MANAGE_NO : HOUSE_MANAGE_NO});
+    return result.length > 0
+}
+
+export const getDetails = async (HOUSE_MANAGE_NO: number) =>{
+    const result:any = await Home.find({HOUSE_MANAGE_NO : HOUSE_MANAGE_NO}, { HOME_DETAILS: 1, _id: 0 });
+    return result[0].HOME_DETAILS;
+}
+
+export const getRates = async (HOUSE_MANAGE_NO: number) => {
+    const result:any = await Home.find({HOUSE_MANAGE_NO : HOUSE_MANAGE_NO}, { HOME_RATES: 1, _id: 0 });
+    return result[0].HOME_RATES;
+}
+
+export const updateDatas = async(HOUSE_MANAGE_NO: number, param: any) => {
+    const result:any = await Home.findOneAndUpdate(
+        { HOUSE_MANAGE_NO : HOUSE_MANAGE_NO },
+        param,
+        { upsert: true, new: true, setDefaultsOnInsert : true }
+    )
+    return result.length > 0;
+}
+
+export const getDateDiff = (d1, d2) => {
+    const date1 = new Date(d1);
+    const date2 = new Date(d2);
+
+    const diffDate = date1.getTime() - date2.getTime();
+
+    return Math.floor(Math.abs(diffDate / (1000 * 60 * 60 * 24))); // 밀리세컨 * 초 * 분 * 시 = 일
+}
+
+export const isNeedUpdate = async (category: string)=>{
+    const result:any = await Home.find({CATEGORY : category},{ CRDAT : 1, _id : 0}).sort({"CRDAT": -1}).limit(1);
+    if(result.length === 0) return true;
+    const today = new Date();
+    return getDateDiff(result[0].CRDAT, today) >= 6 ? true : false
+}
+//7일이상 해당 카테고리로 업데이트가 안된 경우, 업데이트 진행
+
+~~~
+
+# 참고 사이트
+- https://www.mongodb.com/
+- https://www.mongodb.com/ko-kr/compare/mongodb-mysql
