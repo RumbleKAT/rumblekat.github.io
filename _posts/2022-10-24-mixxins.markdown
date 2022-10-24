@@ -1,0 +1,177 @@
+---
+layout: post
+title:  "Mixin in the JS"
+date:   2022-10-24 23:40:00 +0900
+categories: dev
+---
+
+# Mixin이란? 
+자바스크립트는 단이 상속만 허용하는 언어이다. 객체에는 단 하나의 Prototype과 클래스는 하나의 클래스만 상속받을 수 있다.
+믹스인을 사용하면 이러한 제약을 벗어나서 사용이 가능하다. 믹스인이란, 다른 클래스를 상속 받을 필요없이 
+이들 클래스에 구현되어 있는 메서드를 담고 있는 클래스를 의미한다.
+
+믹스인은 특정 행동을 실행해주는 메서드를 제공하는데, 단독으로 쓰이진않고 다른 클래스의 행동을 도와준다.
+
+> 참고자료 https://ko.javascript.info/mixins
+
+# 믹스인 예시
+일반적인 믹스인 사용법
+~~~ js
+let sayHiMixin = {
+    sayHi(){
+        console.log(`Hello ${this.name}`);
+    }
+    sayBye(){
+        console.log(`Bye ${this.name}`);
+    }
+};
+
+class User{ 
+    constructor(name){
+        this.name = name;
+    }
+}
+// Method copy
+Object.assign(User.prototype, sayHiMixin);
+
+new User("Dude").sayHi(); // Hello Dude!
+~~~
+
+믹스인 안에서 믹스인을 상속하는 것도 가능하다.
+아래 코드에서 주의해야할 점은 바로, 어느 mixin을 prototype으로 받느냐의 차이가 있다.
+sayHiMixin의 prototype을 sayMixin으로 할당함으로서, User 클래스의 Prototype을 매핑할땐 sayHiMixin을 매핑해줘야 해당 함수를 쓸수있다.
+자바처럼 인터페이스나 상위클래스에서 하위 객체에 접근하는 식의 접근은 안되는듯..
+
+~~~ js
+let sayMixin = {
+    say(phrase){
+        console.log(phrase);
+    }
+};
+
+let sayHiMixin = {
+    __proto__ : sayMixin,
+    sayHi(){
+        super.say(`Hello ${this.name}`);
+    }
+    sayBye(){
+        super.say(`Bye ${this.name}`);
+    }
+};
+
+class User{
+    constructor(name){
+        this.name = name;
+    }
+}
+
+Object.assign(User.prototype, sayHiMixin);
+~~~
+
+# Mixin의 결론
+믹스인은 객체 지향 언어에서 범용적으로 쓰이고, 다른 클래스들의 메서드 조합을 포함하는 클래스를 의미한다. 
+믹스인을 사용하면 메서드를 복사해 prototype에 구현할 수 있다. mixin은 주로 이벤트 핸들링 등의 행동을 추가하여 클래스를 확장하는 용도로 사용된다.
+mixin을 만들땐 메서드 충돌이 발생하지 않도록, 이름을 신중하게 결론지어야 한다.
+
+> 참고자료 https://velog.io/@moggy/Javascript-%EB%AF%B9%EC%8A%A4%EC%9D%B8-%EA%B8%B0%EB%B2%95Mixin-technique
+
+믹스인은 결국 행위의 분리를 목적으로 한다.
+
+~~~ js
+
+// 나는 행위를 담당하는 Mixin
+const FlyToMixin = (superclass) => class extends superclass {
+	flyTo(destination){
+        console.log(`${this.name} is flying to the ${destination}`);
+    }
+}
+
+// 먹는 행위를 담당하는 Mixin
+const EatMixin = (superclass) => class extends superclass {
+	eat(food){
+        console.log(`${this.name} is eating ${food}`);
+    }
+}
+
+// 헤엄치는 행위를 담당하는 Mixin
+const SwimAtMixin = (superclass) => class extends superclass {
+	swimAt(place){
+        console.log(`${this.name} is swiming at the ${place}`)
+    }
+}
+
+// 믹스인을 탑재한 Mouse
+class Mouse extends SwimAtMixin(EatMixin(Animal)) { /*...*/ }
+
+const mickyMouse = new Mouse('Micky Mouse');
+mickyMouse.swimAt('river');
+~~~
+
+믹스인이 많아질수록, 클래스 선언부에 기술해야하는 양이 많아지는데 lodash의 compose 기능을 이용하면,
+편리하게 조합할 수 있다.
+~~~ js
+import compose from 'lodash/fp/compose';
+
+const behaviors = compose(FlyToMixin, EatMixin, SwimAtMixin)(Animal);
+class Duck extends behaviors {/*...*/}
+~~~
+
+Decorator 패턴을 mixin을 이용하여 작성할 수 있다.
+
+> 참고자료 https://velog.io/@moggy/Javascript-%EC%9E%A5%EC%8B%9D%EC%9E%90decorator-%ED%8C%A8%ED%84%B4
+
+데코레이팅은 본래 기존 연산에 덫붙이는 작업이 필요할때 사용한다. 
+~~~ js
+// Decoratable 믹스인 클래스
+const Decoratable = superclass => class extends superclass {
+	decorate(referenceName, decorator){
+    	// reference 는 기존 메서드를 참조
+        const reference = this[referenceName];
+        
+        // 오버라이딩을 통해 장식자 구현
+        this[referenceName] = (...args) => {
+        	// reference 메서드 연산수행 후, 결과를 첫번째 인자로 담아 decorator 호출
+        	return decorator.apply(this, [
+            	reference.call(this, ...args),
+                ...args
+            ])
+        }
+    }
+}
+
+// super class
+class PureElement {
+	constructor(name){
+    	this.name = name;
+    }
+    
+    element(){
+    	return document.createElement('div');
+    }
+}
+
+// BorderedElement 는 PureElement 와 Decoratable 을 상속.
+class BorderedElement extends Decoratable(PureElement) {
+	constructor(name){
+    	super(name);
+        
+        // This is private
+        const appendBorder = (element) => {
+        	element.style.border = '1px solid';
+            return element;
+        }
+        
+        // 실제 decorating 수행
+        this.decorate('element', (decoObj) => {
+        	return appendBorder(decoObj);
+        });
+    }
+}
+
+new BorderedElement('borderDiv').element();
+
+~~~
+
+자바스크립트 클래스문법에서 private 을 선언할 수 있는 유일한 공간은 객체 생성자 내부뿐인데, 
+이때 public 메서드인 element는 생성자 내부에 선언된 함수에 접근할수 없지만, 장식자 기법이 이를 가능하게한다. 
+- decorate 메서드의 전달인자가 object literal 방식이면 For Loop로 기술된 N개 이상의 메서드를 장식할 수 있기에 더 유연한 구조를 가진다.
