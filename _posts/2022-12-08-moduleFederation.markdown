@@ -86,7 +86,7 @@ Integration
 
 Menu의 경우, Custom Component를 추가해서 app의 최하단에 붙일 예정.
 
-![샘플](/assets/img/1208/01.png)
+![샘플](/assets/img/1208/01.PNG)
 
 dev 서버 설정
 
@@ -290,7 +290,7 @@ body #keys .clear {
 
 ~~~
 
-![샘플](/assets/img/1208/02.png)
+![샘플](/assets/img/1208/02.PNG)
 
 
 # Basket
@@ -316,7 +316,7 @@ body #keys .clear {
   </script>
 ~~~
 
-![샘플](/assets/img/1208/03.png)
+![샘플](/assets/img/1208/03.PNG)
 
 
 # Module Federation 및 remote/host 설정
@@ -359,7 +359,7 @@ module.exports = defineConfig({
 ## Module Federation - remote 웹팩설정
 remote 설정을 하고나서 remoteEntry.js로 들어가보면 exposes한 컨테이너가 보이는걸 확인할 수 있다. 이건 빌드를 해야지 보임. 다만, 이렇게 설정하면, remote 서버에선 화면이 제대로 보이지 않는 문제가 있긴하다.. (Uncaught Error: Shared module is not available for eager consumption: webpack/sharing/consume/default/vue/vue) 아마 메인번들 로딩 순서에 따른 문제로 보임.. 나중에 한다면 deploy 단계에서 해당 소스를 적용하는식으로 해야되지 않을까 싶음
 
-![샘플](/assets/img/1208/04.png)
+![샘플](/assets/img/1208/04.PNG)
 
 menu/vue.config.js
 ~~~ js
@@ -485,10 +485,10 @@ export default defineComponent({
 
 ## 1차 화면 렌더링 
 
-![샘플](/assets/img/1208/05.png)
+![샘플](/assets/img/1208/05.PNG)
 
 만약 화면에 오류가 나올경우, 해당 화면의 레이아웃을 그리지 않는다.
-![샘플](/assets/img/1208/06.png)
+![샘플](/assets/img/1208/06.PNG)
 
 
 ## 응용 - Vuex를 붙여보자
@@ -707,7 +707,7 @@ export default defineComponent({
 
 ## 완성 화면
 
-![샘플](/assets/img/1208/07.png)
+![샘플](/assets/img/1208/07.PNG)
 
 PS. 라우팅도 비슷한 설정으로 된다고 한다.
 
