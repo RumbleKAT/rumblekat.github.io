@@ -175,3 +175,257 @@ new BorderedElement('borderDiv').element();
 자바스크립트 클래스문법에서 private 을 선언할 수 있는 유일한 공간은 객체 생성자 내부뿐인데, 
 이때 public 메서드인 element는 생성자 내부에 선언된 함수에 접근할수 없지만, 장식자 기법이 이를 가능하게한다. 
 - decorate 메서드의 전달인자가 object literal 방식이면 For Loop로 기술된 N개 이상의 메서드를 장식할 수 있기에 더 유연한 구조를 가진다.
+
+> 2023.03.10 추가 내용
+
+# Vue.js에서 재사용 & 컴포지션 - Mixin, Directive
+> 참고자료 https://abangpa1ace.tistory.com/184
+
+Mixins는 Vue 컴포넌트에서 재사용 가능한 기능을 배포하는 유연한 방법이다.
+-> 컴포넌트에 원하는 기능을 실행하는 객체를 커스텀한 후 이를 혼합.
+
+~~~ js
+
+// mixin.js
+var myMixin = {
+  created: function () {
+    this.hello()
+  },
+  methods: {
+    hello: function () {
+      console.log('hello from mixin!')
+    }
+  }
+}
+
+// component.vue
+var Component = Vue.extend({
+  mixins: [myMixin]
+})
+
+var component = new Component() // => "hello from mixin!"
+~~~
+
+1. 속성 병합
+- data, computed 등의 속성을 병합할수 있다. **만약 프로퍼티 중복의 경우, 컴포넌트가 우선순위를 가진다.**
+
+~~~ js
+
+var mixin = {
+  data: function () {
+    return {
+      message: 'hello',
+      foo: 'abc'
+    }
+  }
+}
+
+new Vue({
+  mixins: [mixin],
+  data: function () {
+    return {
+      message: 'goodbye',
+      bar: 'def'
+    }
+  },
+  created: function () {
+    console.log(this.$data)
+    // => { message: "goodbye", foo: "abc", bar: "def" }
+  }
+})
+
+~~~
+
+2. 라이프 사이클 병합
+Mixin의 Hooks가 컴포넌트의 Hooks보다 먼저 호출된다. 즉, mounted가 되도 Mixin이 먼저 된다.
+
+vue의 라이프 사이클
+![샘플](https://www.oreilly.com/api/v2/epubs/9781788299589/files/assets/9f308e86-bbbe-489c-9f93-06abe2675081.png)
+
+~~~ js
+
+var mixin = {
+  mounted: function () {
+    console.log('mixin hook called')
+  }
+}
+
+new Vue({
+  mixins: [mixin],
+  mounted: function () {
+    console.log('component hook called')
+  }
+})
+
+// => "mixin hook called"
+// => "component hook called"
+~~~
+
+3. 객체값 병합 : method, components, directives
+위 프로퍼티에서 객체 값을 요구하는 옵션은 같은 프로퍼티로 병합된다.
+
+~~~ js
+
+var mixin = {
+  methods: {
+    foo: function () {
+      console.log('foo')
+    },
+    conflicting: function () {
+      console.log('from mixin')
+    }
+  }
+}
+
+var vm = new Vue({
+  mixins: [mixin],
+  methods: {
+    bar: function () {
+      console.log('bar')
+    },
+    conflicting: function () {
+      console.log('from self')
+    }
+  }
+})
+
+vm.foo() // => "foo"
+vm.bar() // => "bar"
+vm.conflicting() // => "from self
+
+~~~
+
+4. Global Mixin
+mixin을 전역에서 활용하는 패턴, 이후 생성된 모든 전역 인스턴스에 영향을 미치기 때문에 **지양**된다.
+
+~~~ js
+
+Vue.mixin({
+  mounted() {
+    console.log('hello from mixin!')
+  }
+})
+
+new Vue({
+  ...
+})
+
+~~~
+
+# Custom Directive 
+Vue에선 v-model, v-show 등 기본적으로 제공하는 Vue 디렉티브 들이 존재하는데, 특정기능으로 사용자가 커스텀하여 디렉티브로 사용할 수 있다.
+
+Vue에선 Directive와 Component의 구분을 권장한다.
+- Directive는 DOM의 조작을 위해
+- Components는 뷰나 데이터 로직이 포함되는 단위 구성
+
+![샘플](https://img1.daumcdn.net/thumb/R1280x0/?scode=mtistory2&fname=https%3A%2F%2Fblog.kakaocdn.net%2Fdn%2FbCT3CD%2FbtraQaEQtOv%2F8JrugnwB4FMCs1I4PfaUR0%2Fimg.png)
+
+## 사용자 지정 디렉티브 구현
+auto focus 기능을 하는 사용자 디렉티브 예시.
+디렉티브를 등록하는 방법은 전역, 지역 2가지 방법이 있다. 지역선언을 위해 컴포넌트는 directives 속성을 지원한다.
+
+~~~ html
+<input v-focus>
+~~~
+~~~ js
+// 1) 전역 디렉티브
+Vue.directive('focus', {
+  inserted: function (el) {
+    el.focus()
+  }
+})
+
+// 2) 지역 디렉티브 (컴포넌트 속성)
+directives: {
+  focus: {
+    inserted: function (el) {
+      el.focus()
+    }
+  }
+}
+~~~
+
+### Directive 내 hook 함수
+디렉티브 정의 객체에서는 디렉티브의 적용 및 엘리먼트 상태에 대한 훅 함수를 제공한다.
+
+- bind : 디렉티브가 맨 처음 엘리먼트에 바인딩될 때 한 번만 호출 (el, binding, vnode)
+- inserted : 바인딩된 엘리먼트가 부모노드에 삽입되었을 때 호출 (el, binding, vnode)
+- update : 바인딩된 컴포넌트가 업데이트(자식 업데이트 전) 된 후 호출 (el, binding, vnode, oldVnode)
+- componentUpdated : 바인딩된 컴포넌트 및 자식 컴포넌트들이 업데이트 후 호출 (el, binding, vnode, oldVnode)
+- unbind : 디렉티브가 엘리먼트로부터 언바인딩될 경우 한 번만 호출 (el, binding, vnode)
+
+### Directive hook Parameter
+디렉티브 훅은 다음 전달인자들을 사용한다. 이는 **읽기 전용으로 절대로 변경해선 안된다.**
+
+- el : 디렉티브가 바인딩된 엘리먼트. 이를 사용하여 DOM 조작이 가능한 것이다.
+- binding : 아래의 프로퍼티들을 가진 객체
+    - name : 디렉티브의 이름 (v- 다음)
+    - value : 디렉티브에서 전달받은 값.
+    - oldValue : 이전 값. update와 componentUpdated 에서만 사용할 수 있다. (값 변경확인)
+    - expression : 표현식 문자열 (v-express="1 + 1" 에서 값은 2가 아닌 "1 + 1")
+    - arg : 디렉티브의 전달인자. 있는 경우에만 존재한다. (v-argu:foo 에서 "foo")
+    - modifiers : 포함된 수식어 객체. 있는 경우에만 존재한다. (v-modi.foo.bar 에서 { foo: true, bar: true })
+- vnode : Vue 컴파일러가 만드는 버추얼 노드
+- oldVnode : 이전의 버추얼 노드. 마찬가지로, update와 componentUpdated 에서만 사용 가능.
+
+binding의 arg 속성을 통해 background가 바인딩되면 배경색을, 아니면 기본적으로 폰트색을 변경한다. 
+
+~~~ js
+Vue.directive('highlight', {
+  bind(el, binding, vnode) {
+    if (binding.arg == 'background') {
+      el.style.backgroundColor = binding.value
+    } else {
+      el.style.color = binding.value
+    }
+  },
+})
+~~~
+
+~~~ html
+<p v-highlight="red">Hello World</p>			// 글씨색 변경
+<p v-highlight:background="blue">Hello World</p>	// 배경색 변경
+~~~
+ 
+### Dynamic Directives 인자
+Directive에 전달되는 argument를 동적으로 할당하는 문법
+~~~ html
+<div id="dynamicexample">
+  <h3>Scroll down inside this section ↓</h3>
+  <p v-pin:[direction]="200">I am pinned onto the page at 200px to the left.</p>
+</div>
+~~~
+
+~~~ js
+
+Vue.directive('pin', {
+  bind: function (el, binding, vnode) {
+    el.style.position = 'fixed'
+    var s = (binding.arg == 'left' ? 'left' : 'top')
+    el.style[s] = binding.value + 'px'
+  }
+})
+
+new Vue({
+  el: '#dynamicexample',
+  data: function () {
+    return {
+      direction: 'left'
+    }
+  }
+})
+
+~~~
+
+### Directive 내 Object 값을 할당하고 싶을 경우
+~~~ html
+<div v-demo="{ color: 'white', text: 'hello!' }"></div>
+~~~
+
+~~~ js
+Vue.directive('demo', (el, binding)=>{
+  console.log(binding.value.color) // => "white"
+  console.log(binding.value.text)  // => "hello!"
+})
+~~~
