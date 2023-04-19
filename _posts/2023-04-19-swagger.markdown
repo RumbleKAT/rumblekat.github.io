@@ -1,0 +1,304 @@
+---
+layout: post
+title:  "Swagger/ Junit5 - Spring Boot"
+date:   2023-04-19 21:58:00 +0900
+categories: dev
+---
+
+# 들어가면서
+정리 차원에서 공부했던 내용을 정리하고자 한다. 특히 스프링은 이번에 새로 배운 것들과 기존 것들을 같이 정리하는 과정이 매우 중요한 기술인 것 같다.
+
+# Spring Boot란?  
+- Tomcat, Jetty와 같은 WAS가 임베디드되어 단독 실행가능하다.
+- 라이브러리를 간편하게 추가하는 starter 기능을 제공한다. 
+- 자동화된 구성 (Bean 기반으로 사용하고자 하는 것을 가져온다. 헐리우드 방식)
+
+## Spring Bean?
+- IoC 컨테이너가 Bean 관리를 자동으로 해준다.
+- 의존성 주입을 IoC 컨테이너가 해서 소스코드 수정시 영향도가 작다.
+- 싱글톤, 메모리 절약
+
+> 생성 방법
+- XML (과거엔 무조건 이거)
+- 애노테이션 
+- 직접 코드로 작성
+
+## @Component와 @Bean의 차이 
+- 일반적인 스프링 빈에선 클래스에 @Component 선언
+- 메소드에 @Bean 어노테이션 선언 (클래스에 직접 선언이 불가능할때, 외부 라이브러리)
+
+## 의존성 주입 방법
+- 생성자 주입 (autowired는 생략 가능하다.)
+- 메소드 주입 (클래스 간 순환 참조시 대안, autowired 생략하면 안됨!)
+- 필드 주입 (Java reflection을 사용하는 경우, 속도가 약간 느릴수 있음, private 변수에 Spring Bean을 주입, 주로 테스트 할때 사용)
+
+# JPA 관련 정리
+- transaction이란, 여러 연산의 집합을 하나의 논리적인 단위로 구성하는 것
+- @Transactional 어노테이션 붙이면 됨.
+- JPA save 메서드는 ID 역할을 하는 필드의 값이 Null인지 아닌지에 따라 insert, update가 나뉨.
+
+# Swagger란? 
+REST API를 설계하고 문서화 하기위한 여러가지 도구를 제공한다.
+- Swagger Editor (https://editor.swagger.io/)
+- Swagger Codegen 
+- Swagger UI
+
+# OpenAPI란?
+Http API 표준 설계
+Info, Servers, Security, Paths, Tags, ExternalDocs, Components 등을 yaml로 정의한다.
+
+![샘플](https://user-images.githubusercontent.com/15958325/159498037-f4d719c0-5bef-4d81-b5b1-0a285a74c8c5.png)
+
+- info : API에 대한 메타정보를 제공한다. 
+    하위에 title, description, version이 위치한다.
+- Servers: 서버의 주소 또는 상대 URL을 표시한다.
+- paths: API에 대한 URL의 상대주소
+    - tag: API를 묶어주기 위한 태그
+    - operationId: 실행메서드 정보(""앞에 붙여도 상관없음)
+    - response: 응답값
+        - 각 응답코드를 기준으로 나뉜다.
+        - statusCode: 
+            - description: 응답값의 설명
+            - content-type: 응답값의 타입
+            - schema : 응답값의 스키마 (이부분이 DTO가 된다.)
+                - type: schema의 타입 (array or object)
+                    - items: array인 경우에 표시
+                - $ref: 하위의 DTO에 대한 링크를 가져온다.
+                - nullable: default는 false, 아래의 경우, List를 리턴하는 형태여서 null을 허용해야 한다.
+
+## Swagger API
+
+~~~ yaml
+openapi: 3.0.1
+info:
+  title: My API
+  description: The point Service HTTP API
+  version: v1.1
+servers:
+  - url: /point-api
+paths:
+  /api/v1/points:
+    get:
+      tags:
+        - point
+      operationId: "getpointList"
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/pointDTO'
+                nullable: true
+    /api/v1/point:
+        post: 
+        tags:
+            - point
+        operationId: "postpoint"
+        description: post point
+        requestBody:
+            content:
+            application/json:
+                schema:
+                $ref: '#/components/schemas/NewpointDTO'
+        responses:
+            '200':
+            description: Success
+            content:
+            application/json:
+                schema:
+                $ref: '#/components/schemas/pointDTO'
+            '500':
+            description: Internal ServerError
+~~~
+
+> Swagger를 사용하면, DTO와 RequestMapping을 일일이 안 만들어줘도 된다.
+
+## Swagger Components
+components > schemas 하위에 DTO 정보를 정의한다. 
+DTO는 type, required, properties 필드로 나뉜다.
+
+properties 하위엔 description, type, example, format 필드로 나뉜다.
+(example의 경우, Swagger UI에서 예시값으로 사용된다.)
+format의 경우, integer 필드에서 사용
+
+~~~ yaml
+components:
+    schemas:
+        NewpointDTO:
+            type: object
+            required: #[pointName, description] 무방
+                - pointName
+                - description
+            properties:
+                pointId:
+                    type: integer
+                    format: int32
+                    description: point id
+                    example: 100
+                pointName: 
+                    description: point name
+                    type: string
+                    example: 'point2022'
+                startDate:
+                    description: point start date/time
+                    type: string
+                    format: date-time
+                    example: '2023-05-10T05:01:43+09:00'
+~~~
+
+## gradle 설정
+1. plugins에 라이브러리 추가 
+openApiGenerate 메서드를 쓰면서, 특정 루트의 yaml 파일 기준으로 model을 계속 생성 가능하다. (JPA관련 어노테이션도 붙일 수 있음)
+~~~ gradle
+	id "org.openapi.generator" version '6.0.0'
+~~~
+2. dependencies 에 하단 코드 추가
+~~~ gradle
+    // OpenAPI and Swagger UI
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'io.springfox:springfox-boot-starter:3.0.0'
+~~~
+3. 최하단에 Gradle 함수 추가
+~~~ gradle
+openApiGenerate {
+	generatorName = "spring"
+	inputSpec = "$rootDir/design/api-spec.yaml".toString()
+	outputDir = "$rootDir".toString()
+	apiPackage = "dev.rumblekat.point.api"
+	invokerPackage = "dev.rumblekat.point.api.invoker"
+	modelPackage = "dev.rumblekat.point.api.model"
+	configOptions = [
+			dateLibrary: "java8",
+			java8: "false",
+			generateSupportingFiles: "false",
+			hideGenerationTimestamp: "true",
+			useTags: "true",
+			interfaceOnly: "true",
+			openApiNullable: "false",
+			skipDefaultInterface: "true"
+	]
+}
+~~~
+
+## SwaggerUI 사용을 위한 configuration 추가
+Docket을 Bean으로 등록하면서, Swagger UI를 생성하기 위한 Bean을 등록한다.
+서버를 수행할 때마다 /swagger-ui/ 경로에 Swagger 페이지를 띄울 수 있다.
+
+~~~ java
+
+@Configuration
+@EnableSwagger2
+public class OpenAPIDocumentationConfig {
+
+    // 현재 Application에 대한 정보
+    ApiInfo apiInfo() {
+        return new ApiInfoBuilder()
+                .title("Point - HTTP API")
+                .description("The Point Service HTTP API")
+                .license("")
+                .licenseUrl("http://unlicense.org")
+                .termsOfServiceUrl("")
+                .version("v1")
+                .contact(new Contact("","", ""))
+                .build();
+    }
+
+    @Bean
+    public Docket api(){
+        return new Docket(DocumentationType.SWAGGER_2)
+                .useDefaultResponseMessages(false)
+                .select()
+                .apis(RequestHandlerSelectors.basePackage("dev.rumblekat.point.api.controller"))
+                .paths(PathSelectors.ant("/api/v1/**"))
+                .build()
+                .apiInfo(apiInfo());
+    }
+}
+
+~~~
+
+## Application Properties에 Swagger UI 추가
+~~~ 
+spring.mvc.pathmatch.matching-strategy=ANT_PATH_MATCHER
+~~~
+
+## Controller에서 Swagger 등록
+@Api 어노테이션을 사용하여, 해당 컨트롤러의 API를 Swagger에 등록한다.
+리턴 타입이 ResponseEntity로 리턴되어서, 약간 신기했는데 이 부분은 통합 객체로 묶어서 처리할 수 있지 않을까라는 생각이 든다. 
+
+~~~ java
+@Validated
+@Controller
+@Api(tags="Points")
+public class PointController implements PointApi {
+    ...
+
+    @Override
+    public ResponseEntity<List<PointDTO>> getPointList() {
+        //반환할 객체 생성
+        return ResponseEntity.ok().body(pointService.getPoints());
+    }
+
+~~~
+
+# Spring Boot Test 
+
+@WebMvcTest
+- 사용자의 request를 받아서 처리해야됨.
+Controller 테스트의 경우, 의존성을 가진 service 같은 컴포넌트는 수동으로 추가해줘야된다. 
+- WebMvcTest의 경우, JUnit의 기능을 확장하는 @ExtendWith를 사용한 것.
+
+@SpringBootTest
+- tomcat까지 띄워서 테스트하는것
+- 통합테스트에 제한적 사용
+
+> 중요
+
+WebMvcTest와 SpringBootTest와 같이 Bean을 사용해야 되는 테스트 상황에선 @MockBean으로, 그외엔 @Mock으로 Mocking 처리한다.
+
+
+Mockito 
+- stub으로서, 호출되는 컴포넌트를 대체한다.
+
+@DataJpaTest
+- Jpa를 이용한 repository 영역에 대한 테스트
+- testPropertySource를 통해 어느 서버 데이터와 연계할지 설정 가능
+- autoconfiguretestdatabase는 초기 시작할때, 자동 로드 설정 
+~~~ java
+@DataJpaTest
+@TestPropertySource(properties = { "spring.config.location=classpath:application-test.properties"})
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+class PointRepositoryTest {
+
+    @Autowired
+    PointRepository pointRepository;
+~~~
+
+Assertions
+- assertThat을 이용하여, extracting으로 필드를 추출하고, Tuple로 비교 가능
+~~~ java
+   @MockBean
+   PointRepository pointRepository;
+
+   @Test
+   public void test_getPointList(){
+       List<PointDTO> result = new ArrayList<>();
+       for(int i=1;i<=2;i++){
+           result.add(new pointDTO().pointId(i).pointName("point " + i).description("point description "+i));
+       }
+       // 값을 주입할 필요가 없다. Mocking만 수행한다.
+       when(pointRepository.findAll()).thenReturn(result);
+
+       List<pointDTO> queryResult = pointRepository.findAll();
+       Assertions.assertThat(queryResult)
+               .extracting("pointId","pointName","description")
+               .contains(
+                       Tuple.tuple(1,"point 1", "point description 1"),
+                       Tuple.tuple(2,"point 2", "point description 2")
+               );
+   }
+
+~~~
