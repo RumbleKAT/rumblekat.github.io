@@ -55,6 +55,14 @@ Info, Servers, Security, Paths, Tags, ExternalDocs, Components 등을 yaml로 �
 - paths: API에 대한 URL의 상대주소
     - tag: API를 묶어주기 위한 태그
     - operationId: 실행메서드 정보(""앞에 붙여도 상관없음)
+    - paramters: 파라미터 정보 
+        - name : 파라미터로 넣을 필드명 (={pointId})  
+        - in : path # Path parameter "pointId2" must have the corresponding {pointId2} segment in the "/api/v1/point/{pointId}" path                    
+        - description
+        - required: true # 이건 무조건 true
+        - schema: 
+            - type: integer
+            - format: type의 format
     - response: 응답값
         - 각 응답코드를 기준으로 나뉜다.
         - statusCode: 
@@ -112,6 +120,19 @@ paths:
                 $ref: '#/components/schemas/pointDTO'
             '500':
             description: Internal ServerError
+    /api/v1/point/{point}:
+        get:
+            tag: 
+            - point
+            operationId: getPoint
+            parameters:
+                - name: point
+                  in : path 
+                  description: point ID
+                  required: true
+                  schema:
+                    type: integer
+                    format: int32
 ~~~
 
 > Swagger를 사용하면, DTO와 RequestMapping을 일일이 안 만들어줘도 된다.
