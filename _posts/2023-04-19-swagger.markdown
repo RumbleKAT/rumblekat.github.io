@@ -279,6 +279,7 @@ class PointRepositoryTest {
 
 Assertions
 - assertThat을 이용하여, extracting으로 필드를 추출하고, Tuple로 비교 가능
+
 ~~~ java
    @MockBean
    PointRepository pointRepository;
@@ -289,7 +290,6 @@ Assertions
        for(int i=1;i<=2;i++){
            result.add(new pointDTO().pointId(i).pointName("point " + i).description("point description "+i));
        }
-       // 값을 주입할 필요가 없다. Mocking만 수행한다.
        when(pointRepository.findAll()).thenReturn(result);
 
        List<pointDTO> queryResult = pointRepository.findAll();
