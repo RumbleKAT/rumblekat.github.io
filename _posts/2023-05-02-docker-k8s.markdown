@@ -1,0 +1,238 @@
+---
+layout: post
+title:  "Docker K8S 이론 정리"
+date:   2023-05-02 21:15:00 +0900
+categories: dev
+---
+
+# 들어가면서 
+Docker가 나오기 전엔 LXC라는 namespace 기술을 이용하여 container를 구현하는 방법이 존재. 
+Docker는 Union file system을 사용하여 Layer를 생성하고 동작하는 파일시스템
+
+# Docker 
+> Docker는 앱을 컨테이너 형태로 개발하고, 전달/배포하고, 실행하기 위한 오픈 플랫폼
+
+![도커 아키텍처](https://docs.docker.com/assets/images/architecture.svg)
+
+- Docker Daemon: 컨테이너를 빌드/실행하는 작업
+- Docker Client: Docker Daemon과 통신(REST API사용)
+- Repository: 컨테이너 이미지 공유
+  - Image Layer는 ReadOnly / Container는 ReadWrite
+
+## Docker 명령어
+- Commit: 컨테이너 레이어를 가지고 새로운 이미지 레이어를 만듬
+- detached(-d): 백그라운드에서 실행
+- foreground(-it): 프로세스의 Std I/O, Error에 Console로 연결
+- inspect: 상세 내용 조회 
+- attach: -d 실행 것에 붙여서 볼 수 있음
+- exec: 실행을 전달
+- cp : 컨테이너와 호스트 머신의 파일 복사
+- export: tar로 압축
+
+## Docker의 파일 시스템
+- volumes(default=read write but read only로도 바꿀수있음) 
+    - 컨테이너 간 데이터 공유, 데이터의 원격저장, 고성능 I/O Overlay 파일시스템을 쓸때 Storage Driver를 사용해서 씀.
+    - Docker가 관리하는 영역에 데이터 저장
+- bind mounts
+    - Host 머신의 파일시스템 어디에나 파일저장
+- tmpfs mounts
+    - 메모리를 마운트, 민감정보를 컨테이너 life Cycle동안 저장
+
+## Docker Network
+- bridge
+    - Host머신 내 subnetwork을 구성함 이를 bridge라고 한다.
+    - 컨테이너간 통신이 필요한 경우에 사용
+- host
+    - 이미 선점된 포트가 있으면 띄울수없다.
+    - 호스트의 네트워크를 직접사용
+- none
+    - 모든 네트워킹을 비활성화
+- overlay
+    - 서로 다른 docker daemon에 있는 컨테이너간 통신 가능
+
+![도커 네트워크](https://images.velog.io/images/koo8624/post/ebd1b7b3-e5b5-4fae-87cc-d1c1bad7f805/bridge2%20(1).png)
+
+## DockerFile
+- FROM: BASE Image를 쌓을수 있음
+- ARG: 변수로 사용되는 부분
+- LABEL: 특정 조건을 가지고 컨테이너 내에서 처리
+- RUN: 컨테이너 실행
+- CMD: 컨테이너가 시작될때 실행할 커맨드
+- ENTRY POINT: 무조건 실행되는 영역(CMD는 값에 따라 바뀔 수 있다.)
+- EXPOSE: ENV는 환경변수로, 실행시점에 바꿔질수있다.
+- COPY: 복사
+- ADD: URL을 지정해서 파일복사, TAR 파일도 자동압축해제 기능 제공
+
+> 컨테이너는 작고, 가볍게 만드는 것이 중요하다.
+
+## Multi Stage Build
+- Build Stage와 PRD Stage를 나눠서 이미지 제작가능
+
+![멀티스테이지빌드](https://tachingchen.com/img/docker-multi-stage-builds/docker-multi-stage-builds.jpg)
+
+# Kubernetes
+컨테이너화된 워크로드와 서비스를 관리하기 위한 이식성있고 확장 가능한 오픈소스 플랫폼
+> 워크로드는 k8s에서 구동되는 어플리케이션(=pod)
+
+## Node Component
+- Kubelet
+    - 각 노드의 agent로 pod의 동작 관리
+- Kube-Proxy
+    - 클러스터 레벨의 네트워킹시 필요
+- Continer Runtime
+    - 컨테이너 실행해주는 역할
+
+- etcd
+    - 쿠버네티스의 데이터베이스
+- KubeScheduler
+    - 어느 Node에 Container를 실행해야 할지 결정한다.
+
+## Command Difference
+- 명령형
+    - 필요한 동작을 지시(kubectl)
+- 선언형
+    - 원하는 상태를 선언(yaml - kubectl apply -f app.yaml)
+
+## Namespace
+단일 클러스터 내 리소스 그룹의 격리 매커니즘으로 사용된다. (즉, 클러스터 레벨에서 관리가 되는지 볼수 있음)
+
+namespace setting
+- namespace에도 어떤 설정을 할수 있음
+ResourceQuotas 
+- namespace별 총 리소스 사용을 제한하는 제약조건(=총량을 제어)
+LimitRange
+- 그 안에서 동작하는 개별 컨테이너에 대한 리소스를 정의할때
+
+## Label과 Selector
+아래 두가지를 근거로 pod를 찾음
+Label은 key value 형식
+selector는 쿼리문 (=nodeselector)
+
+## Pod의 Condition
+- PodScheduled
+- ContainersReady
+- Initialized
+- Ready
+
+Initalized(Pod 최초 생성) -> PodScheduled(실행될 Node가 정해짐) -> Image를 pull(Waiting) -> 컨테이너가 실행됨 (ContainerReady: true, Ready: true)
+
+## ContainerProbe
+livenessProbe
+- pod가 살아있는지 아닌지를 확인함 (설정된 주기로 계속 healthcheck를 한다)
+- 문제가 있는 경우, restart를 함
+
+readinessProbe
+- 정말로 서비스에 대한 요청을 처리할수있는지를 체크함
+- 200~400 사이의 응답이 오면 Ok, 그외엔 막아놓음, 준비되면 얘를 열어줌
+
+startupProbe: 컨테이너 어플리케이션이 실행되었는지 파악
+
+successThreshold, failureThreshod - 실패로 판단, 성공으로 판단 하기 위한 최소 횟수
+
+## ReplicaSet / Deployment
+ReplicaSet
+- 레플리카 Pod 집합 
+- 획득 가능한 파드를 식별하는 방법 (selector를 이용해서 pod를 연결)
+
+Deployment
+- 이미지를 변경하는 겅우, replica 갯수를 0으로 줄이고 새로운 replicaset을 만듬
+
+StatefulSet
+- DB를 위해 사용(Master, Slave구조)
+- 각 Pod마다 역할이 있고, PVC를 사용
+
+DaemonSet
+- 공통적으로 다룰 내용에 대해서 사용
+- 로그, 노드 모니터링 데몬 등
+
+## K8S Service(=network)
+ClusterIP(default)
+- Kubectl proxy 명령을 이용하여 localhost와 api 서버간의 proxy를 구성하거나 ingress를 이용해서 외부에서 접속가능
+- 클러스터 내부에서만 사용가능한 IP 제공
+
+NodePort
+- 외부에서 접근할땐 NodePort
+
+LoadBalancer
+- 로드벨런서
+
+> Deployment의 Pod들이 Service의 Selector에 매핑. (=단일 DNS로 지나간다.)
+
+Ingress
+- 서비스를 외부로 노출할때 사용
+  (http, https)
+- SSL 인증서는 cluster에 등록
+- Rule을 정해서 리소스를 만들면 Ingress Controller가 실행(=별도설치)
+
+## Volume
+Pod단위로 Volumne을 관리
+
+PersistentVolume(=PV)
+- 실제 존재하는 용량
+
+PersistentVolumeClaim(=PVC)
+- Selector에 요청하면, K8S가 적당한 Volume을 바인딩해서 쓸수있게 해준다.
+
+static volume provisioning
+- PV를 미리 만들어 놓고 용량을 배정
+
+dynamic volume provisioning
+- claim이 만들어질때 PV를 만들어서 매칭
+
+resources
+- 컨테이너를 실행할때, CPU, Memory를 설정할수있다.
+- requests, limits 설정할수있다
+
+## Config / Secret
+
+ConfigMap
+- key Value 쌍으로 기밀이 아닌 데이터를 저장하는데 사용하는 API
+- 환경변수를 쓰는데, configMapKeyRef로 configmap을 가져온다.
+  키값에 매핑된 value를 가져옴
+
+Secret
+- 암호, 토큰, 인증서 등을 저장할수있는 Object
+- secretRef로 가져옴
+
+
+## Deployment Strategy
+- Recreate
+    - Downtime 존재 가능
+- Rolling Update
+    - 무중단 배포전략, Pod를 순차 update
+    (= default는 25%)
+- Blue/Green
+    - 일시적으로 서비스가 2배될수있어서 비쌈
+    - 원복이 빠름
+    - nodeselector에 버전을 달리해서 빠른 원복가능
+- Canary
+    - 90:10으로 나눠서 확신이 되면 전체 다 바꿈
+    - (stable / canary 3:1) 
+    - selector는 app과 tier를 가지고 loadbalancing
+
+## Horizontal Pod AutoScaler
+- Metrics Server를 사용하여 AutoScaler를 구현
+- desiredReplica = ceil[currReplica * (curMetric / desiredMetric)]
+
+## Helm
+- K8S package managing tool
+- chart (=k8s 오브젝트 묶음)
+- repository (=chart 저장소)
+- release (chart instance)
+
+![helm](https://fluxcd.io/img/helm-controller.png)
+
+helm upgrade
+- 사용된 이미지의 태그를 바꾸거나, CPU Limit을 바꿀때, 
+
+helm rollback
+이전 버전으로 rollback도 됨 
+
+helm create
+- 기본적으로 helm template을 만들어주고, 이를 수정하면됨
+
+helm Lint 
+- chart에서 오류있는지 검증
+
+helm package
+- chart를 압축한다. 이걸 chart repository에서 업로드
