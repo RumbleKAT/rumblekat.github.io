@@ -1,0 +1,81 @@
+---
+layout: post
+title:  "Kotlin JPA #2 "
+date:   2023-10-23 21:33:00 +0900
+categories: dev
+---
+
+# 들어가면서
+java 프로젝트를 kotlin으로 전환하면서 새로 알게되는 부분을 정리합니다.
+
+service에서 mutableList가 있는 것은 추후에 사이드 이펙트를 고려해야되는 부분이다.
+
+## Group by 활용하기
+
+1. for 반복문을 이용한 그루핑
+
+~~~ kotlin
+       val results = mutableListOf<BookStatResponse>()
+       val books = bookRepository.findAll()
+       for( book in books){
+           val targetDto = results.firstOrNull{ dto -> book.type == dto.type}
+           if(targetDto == null){
+               results.add(BookStatResponse(book.type,1))
+           }else{
+               targetDto.plusOne()
+           }
+       }
+~~~
+
+2. 앨비스 연산자 사용 
+
+~~~ kotlin
+       val results = mutableListOf<BookStatResponse>()
+       val books = bookRepository.findAll()
+       for( book in books){
+          results.firstOrNull {dto -> book.type == dto.type}?.plusOne() ?: results.add(BookStatResponse(book.type,1))
+       }
+       return results
+~~~
+
+3. JPA 상에서 groupBy 사용하지만, findAll 함수를 미리 하기 때문에 풀스캔을 함. 성능 이슈 발생 
+
+~~~ kotlin
+
+    bookRepository.findAll()
+        .groupBy { book -> book.type } // Map<BookType, List<Book>>
+        .map{ (type, books) -> BookStatResponse(type, books.size)} // List<BookStatResponse>
+
+~~~
+
+4. JPQL에서 BookStatResponse로 바로 리턴
+
+~~~ kotlin
+
+    @Query("SELECT NEW com.group.libraryapp.dto.book.response.BookStatResponse(b.type, COUNT(b.id)) FROM Book b GROUP BY b.type")
+    fun getStats():List<BookStatResponse>
+
+~~~
+
+## test코드 내에서 private 함수로 반복사용하는 검증 소스를 줄일 수 있다.
+
+~~~ kotlin
+
+    val computerDto = results.first { result -> result.type == BookType.COMPUTER }
+    assertThat(computerDto.count).isEqualTo(2)
+
+    val scienceDto = results.first { result -> result.type == BookType.SCIENCE }
+    assertThat(scienceDto.count).isEqualTo(1)
+
+    //----------------------------------------------------------------------------
+
+    assertCount(results,BookType.COMPUTER, 2L)
+    assertCount(results,BookType.SCIENCE, 1L)
+
+    private fun assertCount(results: List<BookStatResponse>, type: BookType, count: Long){
+        assertThat(results.first{
+            result -> result.type == type
+        }.count).isEqualTo(count)
+    }
+
+~~~
