@@ -18,6 +18,7 @@ java 프로젝트를 kotlin으로 전환하면서 새로 알게되는 부분을 
 
 ## 세팅방법
 gradle 버전이 상위 버전이여서, querydsl 세팅이 쉬움
+
 ~~~ 
     id 'org.jetbrains.kotlin.kapt' version '1.6.21'
     ...
@@ -32,7 +33,9 @@ gradle 버전이 상위 버전이여서, querydsl 세팅이 쉬움
 
 ## sample 1
 기존 Repository 인터페이스에서 신규 인터페이스를 추가한다. 
+
 - UserRepository
+
 ~~~ kotlin
 interface UserRepository: JpaRepository<User,Long>, UserRepositoryCustom {
     fun findByName(name: String): User?
@@ -45,6 +48,7 @@ interface UserRepository: JpaRepository<User,Long>, UserRepositoryCustom {
 ~~~
 
 - UserRepositoryCustom
+
 ~~~ kotlin
 interface UserRepositoryCustom {
 
@@ -53,6 +57,7 @@ interface UserRepositoryCustom {
 ~~~
 
 - UserRepositoryCustomImpl
+
 ~~~ kotlin
 class UserRepositoryCustomImpl(
     private val queryFactory: JPAQueryFactory
