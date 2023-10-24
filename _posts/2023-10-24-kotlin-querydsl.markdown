@@ -31,6 +31,25 @@ gradle 버전이 상위 버전이여서, querydsl 세팅이 쉬움
 위의 코드를 빌드하면, 하기 경로에 객체가 생긴다. 그 뒤로 사용가능
 > build/generated/source/kapt/main/com.group.libraryapp.domain.book.QBook
 
+- config/QuerydslConfig 추가
+JPAQueryFactory를 Bean으로 등록하고, 이를 활용해서 querydsl 코드를 작성한다.
+
+~~~ kotlin 
+
+@Configuration
+class QuerydslConfig(
+    private val em: EntityManager,
+) {
+    @Bean
+    fun querydsl(): JPAQueryFactory {
+        return JPAQueryFactory(em)
+    }
+}
+
+
+~~~
+
+
 ## sample 1
 기존 Repository 인터페이스에서 신규 인터페이스를 추가한다. 
 
