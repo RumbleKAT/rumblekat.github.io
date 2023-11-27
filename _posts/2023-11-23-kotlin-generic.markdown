@@ -156,3 +156,45 @@ fun main() {
     otherCage.animals.addAll(this.animals)
   }
 ~~~
+
+
+## 제네릭은 JDK 초기 버전부터 있던게 아니다.
+
+자바 5부터 List<String>도 런타임 때는 타입 정보를 제거함
+자바에선 지금도 raw type을 만들 수 있다. 그러나, 코틀린은 언어 초기부터 제네릭이 고려됨.
+
+런타임 때는 타입정보가 사라진다. -> 타입 소거
+
+star projection을 활용해서 최소한 List인지는 확인할 수있다.
+해당 타입 파라미터에 어떤 값이 들어있는지는 모른다. 그러나 리스트는 확실함
+
+~~~ kotlin
+if( data is List<*>){
+  val element: Any? = data[0]
+}
+~~~
+
+mutableList에선 함부로 데이터를 넣을 수는 없다.
+제네릭 함수에서도 타입정보는 사라진다.
+
+주어진 리스트에 T 타입의 정보를 알아야하는 상황 일때
+**inline** 함수와 **reified** 지시어를 사용해서 처리한다.
+
+~~~ kotlin
+fun main() {
+  val numbers = listOf(1,2f,3)
+  println(numbers.filterIsInstance<Float>())
+}
+
+inline fun <reified T> List<*>.hasAnyInstanceOf() : Boolean{
+  return this.any {it is T}
+} // T의 인스턴스를 만들거나 T의 companion을 쓸순없음
+
+~~~
+
+
+
+
+
+
+
