@@ -64,3 +64,48 @@ value as Type => Type으로 타입 캐스팅한다.
 val str = "abc"
 str[0] = "a"
 ~~~
+
+# 비교 연산자
+Java와 다르게 객체를 비교할때 비교 연산자를 사용하면 자동으로 compareTo를 호출해준다.
+
+~~~ kotlin
+ val money1 = Javamoney(2_000L)
+ val money2 = Javamoney(1_000L)
+
+ if(money1 > money2){
+    println("Money1이 Money2보다 금액이 큽니다.")
+ }
+~~~
+
+kotlin의 등등성과 동일성
+- kotlin은 동등성의 경우, == (=equals)
+- kotlin은 동일성에 ===
+
+~~~ kotlin
+val money1 = JavaMoney(1_000L)
+val money2 = money1
+val money3 = JavaMoney(1_000L)
+
+println(money1 === money3)
+~~~
+
+Lazy연산
+- 조건문에서 앞에게 true이면 뒤에 조건은 물어보지도 않고 넘어감
+
+in / !in
+ - 컬렉션 범위가 포함
+a..b
+ - a부터 b까지의 범위 객체 생성
+
+코틀린에선 연산자 오버로딩이 가능함
+
+~~~ kotlin
+val money1 = Money(1_000L)
+val money2 = Money(2_000L)
+println(money1 + money2) // 3_000
+~~~
+
+
+
+
+
