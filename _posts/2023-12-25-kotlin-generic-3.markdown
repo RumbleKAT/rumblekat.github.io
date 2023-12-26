@@ -106,6 +106,37 @@ println(money1 + money2) // 3_000
 ~~~
 
 
+## 위임패턴
+by의 역할은 property과 lazy 객체의 getter를 이어준다.
 
+Lazy 객체의 getter를 어떻게 할수 있을까?
+-> by 뒤에 위치한 클래스는 getValue, setValue라는 약속된 함수를 써야된다.
 
+~~~ kotlin
+class Person3{
+    // name과 대응되는, 외부로 드러나지 않는 프로퍼티: Backing Property
+    private val delegateProperty = LazyInitProperty{
+        Thread.sleep(2_000L)
+        "김수한무"
+    }
+
+    val name:String
+        get() = delegateProperty.value
+
+    //위임 패턴, Person의 getter가 호출되면 Delegate property가 대신해준다.
+}
+
+class LazyInitProperty<T>(val init: () -> T){
+    private var _value: T? = null
+    val value: T
+        get(){
+            if(_value == null)
+                this._value = init()
+            return _value!!
+        }
+    operator fun getValue(thisRef: Any, property: KProperty<*>): T{
+        return value // 원래 lazy는 스레드 세이프함
+    }
+}
+~~~
 
