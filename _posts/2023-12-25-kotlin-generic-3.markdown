@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Kotlin Type"
-date:   2023-12-05 21:35:00 +0900
+date:   2023-12-25 21:35:00 +0900
 categories: dev
 ---
 
