@@ -132,3 +132,38 @@ class GreenApple3: Apple(
 
 
 ~~~
+
+# Iterable
+각 단계마다 중간 collection이 임시로 생성된다.
+대용량 데이터를 다루려면 sequence를 적용한다.
+
+1. sequence는 각 단계가 모두 수행이 안될수있다.
+2. 한 원소에 대해서 모든 연산을 수행하고, 다음 원소로 넘어간다. (세로로 연산)
+3. 최종 연산이 나오기 전까지 계산 자체를 미리하지 않는다.
+
+> 이를 **지연** 연산이라고 한다.
+
+~~~ kotlin
+data class MyFruit(
+    val name: String,
+    val price: Long,
+)
+
+fun main() {
+    val fruits = listOf(
+        MyFruit("사과", 1000L),
+        MyFruit("바나나", 3000L),
+    )
+
+    val avg = fruits.asSequence()
+        .filter{ it.name == "사과" }
+        .map{ it.price }
+        .take(10_000)
+        .average()
+
+    println(avg)
+}
+
+~~~
+
+데이터가 많지않으면, Iterable이 유리, 많으면 Sequence
