@@ -1,0 +1,77 @@
+---
+layout: post
+title:  "Traefic"
+date:   2024-01-01 20:45:00 +0900
+categories: dev
+---
+
+# 로드밸런서 처리 방식
+IP Hash 방식은 특정 서버로만 접근하게 할수있고 일반적인 로드밸런서는 least connection을 사용한다.
+
+# API Gateway
+- 클라이언트와 API 서버 사이에서 요청을 처리하고 적절한 서비스로 라우팅
+- 인증 및 승인, 액세스 권한, Rate limiting 등 추가적인 기능을 제공
+
+# Traefic
+Traefik은 주로 리버스 프록시 및 로드 밸런서로 사용되며, SCG처럼 필터를 통해 비즈니스 로직을 추가하는 기능을 제공하지 않는다.
+
+하지만 아래의 기능을 제공하고 있어서, 간단한 API Gateway를 구축하기엔 괜찮은 듯하다.
+
+- MSA 배포를 위한 프록시 및 로드 밸런서
+- Circuit Breaker
+- ECS
+- Websocket Http/2 gRPC
+
+> 출처
+> https://www.joinc.co.kr/w/man/12/traefik
+
+~~~ yaml
+version: "3.3"
+
+services:
+
+  traefik:
+    image: "traefik:v2.9"
+    container_name: "traefik"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  whoami:
+    image: "traefik/whoami"
+    container_name: "simple-service"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Path(`/whoami`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+
+  redis:
+    image: redis
+    container_name: "redis-service"
+    expose:
+      - 6379
+
+  counter:
+    image: counter-docker
+    container_name: "counter-service"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.counter.rule=PathPrefix(`/count`)"
+      - "traefik.http.middlewares.strip-counter.stripprefix.prefixes=/count" # localhost/count -> counter
+      - "traefik.http.routers.counter.middlewares=strip-counter@docker"
+    depends_on:
+      - redis
+    expose:
+      - 8000
+    restart: always
+
+~~~
+
