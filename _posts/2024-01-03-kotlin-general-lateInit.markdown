@@ -52,3 +52,83 @@ getter가 호출, 결과가 있으면 결과를 리턴함
 val person = Person(mapOf("name" to "ABC"))
 println(person.age) // 예외 발생
 ~~~
+
+# 위임 객체
+코틀린은 기본적으로 위임객체용 인터페이스를 제공한다.
+잠깐 사용할 위임객체도 만들수있음, 아래처럼 익명 클래스에도 사용가능
+
+~~~ kotlin
+val status: String by object : ReadOnlyProperty<Person3, String>{
+    private var isGreen: Boolean = false
+    override fun getValue(thisRef: Person3, property: KProperty<*>): String{
+        return if(isGreen){
+            isGreen = true
+            "Happy"
+        } else {
+            isGreen = false
+            "Sad"
+        }
+    }
+} 
+
+~~~
+
+위임 프로퍼티와 위임 객체를연결할때 로직을 넣으면,
+프로퍼티 이름을 직접 넣어줘야 하니, 번거롭고 추가적인 작업이 필요한 문제점이 있다.
+
+## provideDelegate 함수
+DelegateProvider에 내용을 추가하여 제어 가능
+> 비슷하게 propertyDelegateProvider로 됨
+
+~~~ kotlin
+class Person5{
+    val name by DelegateProvider("song")
+    val country by DelegateProvider("korea")
+}
+
+class DelegateProvider(
+    private val initValue: String
+){
+    operator fun provideDelegate(thisRef: Any, property: KProperty<*>): DelegateProperty{
+        if(property.name != "name"){
+            throw IllegalArgumentException("only name field have to")
+        }
+        return DelegateProperty(initValue)
+    }
+}
+~~~
+
+위임 클래스는 위임 프로퍼티와 원리가 다르다.
+
+~~~ kotlin
+interface Fruit{
+    val name: String
+    val color:String
+    fun bite()
+}
+
+open class Apple: Fruit{
+    override val name: String
+        get() = "사과"
+    override val color: String
+        get() = "빨간색"
+    override fun bite(){
+        print("사과 톡톡~")
+    }
+}
+
+class GreenApple2: Apple{
+    override fun bite(){
+        print("초록사과"~)
+    }
+}
+// 합성을 이용, 클래스 위임을 사용할 수있다.
+class GreenApple3: Apple(
+    private val apple:Apple
+): Fruit by apple{
+    override val color: String
+        get() = "초록색"
+}
+
+
+~~~
