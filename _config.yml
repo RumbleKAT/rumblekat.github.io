@@ -26,7 +26,7 @@ baseurl: ""
 github_username:  rumblekat
 
 # Build settings
-theme: just-the-docs
+theme: minima
 plugins:
   - jekyll-feed
 
