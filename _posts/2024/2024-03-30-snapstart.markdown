@@ -11,6 +11,7 @@ categories: dev
 > https://www.lgcns.com/blog/cns-tech/aws-ambassador/48783/
 > https://www.lgcns.com/blog/cns-tech/aws-ambassador/49072/
 > https://github.com/aws/serverless-java-container/wiki/Quick-start---Spring-Boot3
+> https://medium.com/@jmmoon1974/lambda%EC%9D%98-concurrent-execution%EC%97%90-%EB%8C%80%ED%95%B4%EC%84%9C-%EC%9E%98-%EB%AA%BB-%EC%9D%B4%ED%95%B4%ED%95%98%EB%8A%94-%EB%B6%84%EB%93%A4%EC%9D%B4-%EC%9E%88%EC%96%B4-%EA%B8%80%EC%9D%84-%EC%9E%91%EC%84%B1%ED%95%B4-%EB%B4%85%EB%8B%88%EB%8B%A4-34913a7821f2
 
 AWS람다는 개발 측면에서, 프로그래밍이 간단하고, 운영측면에서는 변화하는 사용 패턴에 신속하게 대응 할수 있는 어플리케이션이다.
 람다의 특징은 **함수가 안전하고, 격리된 환경**에서 실행된다는 것이다. 각 환경의 생명주기는 **Init**, **Invoke**, **Shutdown** 이라는 3가지 단계로 구성된다.
@@ -96,6 +97,7 @@ AfterRestore는 스냅샷을 Restore 한 후에 실행되는 hook이다.
 사내 통합인증 서버를 AWS Lambda와 Snapstart를 기반으로 만들었고, 그 결과는 아주 성공적이었다. 해당 프로젝트의 주 목적은 이러했다.
 
 - 기존에 Custom Authorizer 람다 기반의 인증 체계에서 통합 인증 토큰을 활용한 인증속도 개선
+- 3rd Party 인증 후 Cognito SAML 인증 방식으로 이어지는 부분의 사용성 저하 문제
 - 신규 인증 방식의 추가 니즈
 - OpenAPI나 리전간 통신에 대한 인증 방식 필요
 - 장애에 복구성이 높고, 증가하는 TPS에 반응적으로 대응 필요
@@ -110,6 +112,8 @@ AfterRestore는 스냅샷을 Restore 한 후에 실행되는 hook이다.
 - JDBCTemplate 
 - Jedis
 - aws-serverless-java-container-springboot3
+    - 이 라이브러리는 spring cloud function에 기초한다. 
+    - https://github.com/RumbleKAT/aws-spring-cloud-function
 
 SnapStart를 수행하지 않고 배포를 했을땐 1분 안쪽으로 배포가 된다. 그렇지만, SnapStart를 수행하는 경우 3분정도 소요가 된다. 추가로, 환경 변수의 이름을 변경하거나 할땐 CloudFormation이 Crashed 되는 경우가 있어서 몇번 Stack 삭제를 진행했었다. 환경변수 편집이 필요하다면 Snapstart를 제외하고 다시 배포하면 정상적으로 반영된다. 
 
@@ -209,10 +213,10 @@ SnapStart를 수행하지 않고 배포를 했을땐 1분 안쪽으로 배포가
 - Cold Start 및 Spring Initialize 최적화
     - Snapstart를 실행해도, Cold Start에 따라 속도는 조금 저하된다. EventBridge에 Warmer용 람다를 설정해서, Snapstart alias가 적용된 람다버전을 Warming 해줬다.
     추가로, 람다 Warming은 Spring 인스턴스를 직접적으로 warming하지 않아서 Health-Check API를 통해 Spring 인스턴스도 Warming 해줬다. 
-    여기서, 170ms는 api gateway에서 default로 소요되는 ms이다.
-    > SnapStart민 적용시 1200ms
-    > SnapStart + Cold Start Warmer invoke 적용시 400ms
-    > SnapStart + Warmer invoke + call Health check 적용시 170ms 
+    여기서, 170ms는 api gateway에서 default로 소요되는 ms이다. target api가 같은 VPC에 있는 경우, 약 50ms 정도로 단축된다.
+        > SnapStart민 적용시 1200ms
+        > SnapStart + Cold Start Warmer invoke 적용시 400ms
+        > SnapStart + Warmer invoke + call Health check 적용시 170ms 
 - ComponentScan 
     - Spring 어노테이션은 패키지를 수신할 수 있으며 패키지의 모든 클래스에서 Spring 관련 구성, 리소스 및 Bean을 자동으로 스캔한다. 이것은 개발 중에 매우 유용하지만 클래스가 많아지면 그만큼 초기화 시간이 느려진다. 
         ~~~ java
@@ -252,3 +256,63 @@ SnapStart를 수행하지 않고 배포를 했을땐 1분 안쪽으로 배포가
 
 ## 전체 아키텍처
 ![인증서버_아키텍처](/assets/img/2024/240330/AuthLambda.png)
+
+통합 인증서버를 적용하면서, 기존에 있었던 4가지 인증 방식은 다음과 같은 장점을 가졌다.
+
+1. 사내 포탈 sso 연계의 경우, SSO 연계 이후 Cognito SAML을 통해 Cognito Token을 발급받아 초기 로그인 과정이 복잡하고 느린 단점이 극복되었다.
+2. 팀내 포탈 연계의 경우, 별도의 인증 람다로 나눠져 있던 기능들이 하나의 람다로 통합되어 연계가 쉬워졌다. 
+3. Authing(중국 인증)의 경우, 별도 region에서 연계되던 방식이라 관리의 이중화 문제가 있었는데 이부분이 해결되었다.
+4. 부서내 backend 간 통신시 인증서버에서 ip별로 로그인 방식을 새로 추가할수 있어서 더 쉽게 통합이 되었다.
+5. 기존의 인증 방식에 비해 최대 4배 정도 빠른 응답 속도를 얻게되었다. 
+    > 200ms -> 50ms
+6. JWT 방식의 인증 방식과 그외 인증 방식이 하나의 API로 통합되었다.
+
+평균 소요시간은 다음과 같다.
+- Token Generate: 400 ~ 600ms (3rd Party token 인증이 존재하여 조금 느림) / 기존 700 ~ 800ms
+- Token Verify: 50ms / 기존 200 ~ 300ms 
+- Token Logout: 100ms / 기존 200 ~ 300ms
+
+## Lambda와 Concurrency
+
+soft limit으로 aws root account에 각 region별 Full Account Concurrency가 존재.
+이는 한 aws root account 에 해당 region의 모든 lambda 함수의 concurrent execution 값이 이 설정 값을 넘을 수 없다는 의미이다. 
+
+예를 들면, 1개의 lambda 함수가 요청이 너무 많이 들어와서 concurrent execution이 현재 1000이라면 동 시간대에 다른 lambda 함수를 호출하면 모두 Throttle이 걸린다는 의미이다.
+
+lambda가 항상 1000개의 concurrent execution이 즉시 가능한 상태로 대기하고 있지는 않는다. 요청이 들어오는 경우 lambda는 capacity를 증가시켜 주는데 최초에 burst하게 증가 시키는 concurrent execution을 Burst Concurrency라고 하고 여기에도 limit이 있다. seoul region의 경우, 500
+
+최초 burst 이후에도 요청이 계속 대량으로 들어올 경우 lambda는 region에 관계 없이 concurrency를 분당 500 씩 증가시킨다. 
+
+이를 해결하기 위해서, 2019년 Provisioned Concurrency 기능이 출시되었다. version이나 alias 별로, micro VM이 항시 초기화된 상태로 대기화해서 일관된 latency 응답을 보장한다. **단 latest version은 설정 불가**
+
+![lambda_concurrency](https://docs.aws.amazon.com/images/lambda/latest/dg/images/concurrency-4-animation.gif)
+
+
+## 동시성 계산법
+
+일반적으로 시스템의 동시성은 둘 이상의 작업을 동시에 처리할 수 있는 기능이다. Lambda에서 동시성은 함수가 동시에 처리하는 진행 중인 요청의 수이다. 시간. Lambda 함수의 동시성을 측정하는 빠르고 실용적인 방법은 다음을 사용하는 것이다.
+
+~~~
+Concurrency = TPS * duration(by second)
+~~~
+
+예를 들어, 초당 100개의 request 받고 duration이 1초라면, concurrency는 100이다.
+역으로, 평균 duration을 기준으로 몇개의 concurrency만 있다면, TPS를 추산할 수 있다. 
+
+~~~
+TPS = concurrency / duration(by second)
+~~~
+
+위의 verify API를 기준으로 예를 든다면, 15개의 concurrency만 있다면 300TPS가 해결된다. 
+
+~~~
+300TPS = 15(concurrency) / 0.05(second) 
+~~~
+
+그리하여, 여러 concurrency가 필요한 경우, warmer를 이용해서 특정 람다들이 동시에 띄울수 있게하면 provision concurrency와 같은 효과를 낼 수 있다. 
+그리고, duration이 적을 수록 concurrency는 적은 수로도 많은 TPS를 처리할수 있다.
+
+## 추가 고려사항
+- reactor와 webflux를 활용한 비동기 인증체계를 염두해두고 있다.
+    - 특히 DB 사용의 경우, r2dbc 고려 중
+- spring boot 외에 spring cloud function만을 이용하여 reactive한 개발 환경도 고려하고있다. 
