@@ -1,7 +1,7 @@
 ---
 layout: post
-title:  "S3 File Architecture & Lambda Invoke Proxy"
-date:   2024-05-07 22:35:00 +0900
+title:  "S3 File Architecture, Lambda Invoke Proxy"
+date:   2024-05-07 22:30:00 +0900
 categories: dev
 ---
 
