@@ -1,0 +1,681 @@
+---
+layout: post
+title:  "ELK With K8s"
+date:   2025-04-09 22:23:00 +0900
+categories: dev
+---
+
+# 참고자료
+> https://www.inflearn.com/course/%EC%BB%B4%ED%8C%A9%ED%8A%B8%ED%95%98%EA%B2%8C-%EC%BF%A0%EB%B2%84%EB%84%A4%ED%8B%B0%EC%8A%A4-elk-%EB%A1%9C%EA%B7%B8%EB%AA%A8%EB%8B%88%ED%84%B0%EB%A7%81/dashboard
+
+# Docker 기본 로그 드라이버: json-file
+Docker 엔진의 기본 로그 드라이버는 **json-file**이며, 별도 설정을 하지 않으면 모든 컨테이너의 표준 출력(stdout)과 표준 에러(stderr)이 호스트의 JSON 형식 파일로 캡처되어 기록됩니다​
+. Docker는 각 컨테이너마다 개별적인 로그 파일을 생성하며, 하나의 로그 파일에는 오직 해당 컨테이너의 로그만 저장됩니다​
+. 이러한 JSON 로그 파일들은 Ubuntu 등의 Linux 호스트에서는 기본적으로 /var/lib/docker/containers/<컨테이너 ID>/<컨테이너 ID>-json.log 경로에 위치합니다​
+. 즉, 컨테이너 ID를 이름으로 갖는 디렉터리 아래에 동일한 이름의 *-json.log 파일이 
+컨테이너별로 만들어져 누적됩니다.
+
+``` json
+{
+  "log": "예시 로그 메시지\n",
+  "stream": "stdout",
+  "time": "2019-01-01T11:11:11.111111111Z"
+}
+
+```
+
+아래는 Filebeat, Logstash, Elasticsearch가 연결되어 로그를 수집, 처리, 저장하는 전체 데이터 파이프라인의 동작 과정과 각 서비스의 역할에 대한 설명입니다.
+
+---
+
+## 전체 로그 파이프라인 개요
+
+1. **Filebeat → Logstash → Elasticsearch** 순으로 로그 데이터가 흐릅니다.  
+   - **Filebeat**는 경량 로그 선적기(lightweight log shipper)로서, 다양한 로그 파일(예: 컨테이너 로그, 어플리케이션 로그 등)을 수집해 Logstash로 전달합니다.  
+   - **Logstash**는 로그 데이터를 수신하여 필요에 따라 **필터**나 **변환 작업**(예: grok, 변환, enrich 등)을 수행한 후, 이를 Elasticsearch에 전송합니다.  
+   - **Elasticsearch**는 수신한 데이터를 **저장 및 인덱싱**하고, 검색 및 시각화 도구(Kibana 등)에서 쉽게 조회할 수 있도록 합니다.
+
+---
+
+## 각 서비스의 역할 및 동작 과정
+
+### 1. Filebeat
+
+- **역할:**  
+  - 로그 파일을 실시간으로 감시(tail)하며, 새로운 로그 항목이 발생하면 이를 읽어 중앙 로그 처리 시스템(여기서는 Logstash)으로 전달합니다.
+  - 경량(리소스 사용 최소)으로 동작하여 에이전트로써 서버나 컨테이너에서 실행됩니다.
+  - Kubernetes나 Docker 등의 컨테이너 환경에서도 각 노드별로 배포되어 **분산 로그 수집**을 가능하게 합니다.
+
+- **주요 동작:**  
+  - **로그 수집:** 지정된 파일 경로에서 로그 파일을 모니터링하며 새로운 로그 항목을 감지합니다.
+  - **메타데이터 추가:** `add_kubernetes_metadata` 등의 프로세서를 사용하여 로그 항목에 컨테이너나 Pod 관련 메타데이터(예: 서비스 이름, 네임스페이스, 컨테이너 ID 등)를 추가할 수 있습니다.
+  - **전송:** 수집된 로그 데이터를 네트워크를 통해 Logstash의 Beats 입력 플러그인으로 전송합니다.
+
+### 2. Logstash
+
+- **역할:**  
+  - 로그 및 이벤트 데이터를 집계하고 전처리(구문 분석, 변환, 필터링)를 수행하는 **데이터 수집 및 처리 엔진**입니다.
+  - Filebeat로부터 전달받은 데이터에 대해 패턴 매칭(grok)이나 데이터 정제, 포맷 변환을 하여 구조화된 데이터로 변경합니다.
+  - 처리된 데이터를 여러 출력 대상으로 보낼 수 있으며, 여기서는 Elasticsearch로 전송합니다.
+
+- **주요 동작:**  
+  - **입력 (Input):** Logstash는 Beats 플러그인을 통해 Filebeat로부터 데이터를 수신합니다.
+  - **필터 (Filter):** grok, mutate, date, 그리고 기타 다양한 필터 플러그인을 사용하여 로그 데이터를 파싱하고, 필요한 정보를 추출 및 변환합니다.
+  - **출력 (Output):** 처리된 로그를 Elasticsearch에 전달하며, 전송 옵션(예: 인덱스 이름, 버전 관리 등)을 지정할 수 있습니다.
+
+### 3. Elasticsearch
+
+- **역할:**  
+  - 수집된 로그 데이터를 저장, 인덱싱 및 검색하기 위한 **분산 검색 및 분석 엔진**입니다.
+  - 대용량 데이터에 대해 빠른 검색과 집계를 지원하며, 로그 데이터의 실시간 분석 및 시각화를 위한 기반 데이터 저장소 역할을 합니다.
+  - RESTful API를 제공하여 다양한 애플리케이션(예: Kibana)을 통해 데이터를 시각화하고 모니터링할 수 있습니다.
+
+- **주요 동작:**  
+  - **데이터 저장 및 인덱싱:** Logstash로부터 전달받은 데이터를 Elasticsearch 클러스터에 저장하고, 빠른 검색이 가능하도록 인덱스를 생성합니다.
+  - **검색 및 집계:** 색인된 로그 데이터를 기반으로 복잡한 검색 질의나 집계(aggregations)를 수행합니다.
+  - **확장성 및 내결함성:** 클러스터로 구성되어 있기 때문에 데이터의 분산 저장, 백업, 재해 복구 기능을 지원합니다.
+
+---
+
+## 데이터 흐름 요약
+
+1. **Filebeat**  
+   - 각 노드 또는 컨테이너에서 로그 파일을 실시간으로 감시하여, 새 로그가 발생하면 이를 수집하고 필요한 메타데이터를 추가합니다.
+   - 로그 데이터를 **네트워크를 통해 Logstash로 전송**합니다.
+
+2. **Logstash**  
+   - Filebeat에서 전달된 로그 데이터를 수신한 후, 다양한 필터 작업(예: grok 패턴을 사용한 로그 파싱)을 수행합니다.
+   - 처리된 데이터를 **Elasticsearch로 출력**합니다.
+
+3. **Elasticsearch**  
+   - Logstash로부터 받은 구조화된 데이터를 저장 및 인덱싱하여, 신속한 검색과 집계가 가능하도록 합니다.
+   - Kibana 같은 시각화 도구나 직접 제공하는 REST API를 통해 분석이 가능합니다.
+
+이와 같이 Filebeat, Logstash, Elasticsearch는 로그 데이터의 수집부터 전처리 및 저장/분석까지의 전체 파이프라인을 이루며, 각 구성요소가 서로의 역할을 보완하여 중앙 집중식 로그 모니터링 시스템을 완성하게 됩니다.
+
+---
+
+# 샘플 프로젝트 설명
+간단하게 ELK stack을 구현하는 예시의 코드로, 일부 편의를 위해 root 권한을 획득한 부분이 있음
+
+## 구성
+```
+elasticsearch
+ㄴ elasticsearch.yml
+
+filebeat
+ㄴ filebeat.yml
+
+kibana
+ㄴ kibana.yml
+
+logstash
+ㄴ logstash.yml
+
+sample-app
+ㄴ log-test.yml
+
+```
+
+아래는 제공해주신 YAML 코드 전체와 함께 각 파일의 역할 및 실행 과정을 설명한 내용입니다. 각 구성 요소(Filebeat, Logstash, Elasticsearch, Kibana, 테스트용 API 등)가 전체 로그 파이프라인과 모니터링 스택에서 어떤 역할을 수행하는지, 그리고 코드 내에서 어떤 설정이 이루어지는지 단계별로 설명합니다.
+
+---
+
+## 1. Logstash 구성
+
+Logstash는 Filebeat로부터 전달된 로그를 수신하여 필터(예, grok)를 통해 파싱한 후 Elasticsearch로 데이터를 출력합니다.
+
+### A. Logstash ConfigMap  
+**목적:** Logstash 파이프라인의 구성을 담은 설정 파일(`logstash.conf`)을 정의합니다.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: elk
+data:
+  logstash.conf: |-
+    input {
+      beats {
+        port => 5044
+      }
+    }
+
+    filter {
+      grok {
+        match => {
+          "message" => [
+            "%{WORD:http_method} %{URIPATH:request_path}",
+            "\[%{WORD:log_level}\] %{IP:client_ip} userId %{INT:user_id}",
+            "\[%{WORD:log_level}\] userId %{INT:user_id}"
+          ]
+        } 
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts => ["http://elasticsearch-0.elasticsearch-svc:9200"]
+        index => "%{[@metadata][beat]}-%{+YYYY.MM.dd}"
+      }
+    }
+```
+
+- **Input:**  
+  - Beats 입력 플러그인을 사용하여 Filebeat로부터 포트 5044를 통해 로그를 수신합니다.
+- **Filter:**  
+  - `grok` 필터를 이용해 로그 메시지(`message`)의 패턴을 분석합니다.  
+    - 첫 번째 패턴은 HTTP 메소드와 요청 경로를 추출합니다.
+    - 두 번째 패턴은 대괄호로 감싼 로그 레벨, 클라이언트 IP, 그리고 userId를 추출합니다.
+    - 세 번째 패턴은 대괄호로 감싼 로그 레벨과 userId만 추출합니다.
+- **Output:**  
+  - 파싱된 로그 데이터를 Elasticsearch로 전송합니다.
+  - 인덱스 이름은 Beats 메타데이터와 날짜 형식을 조합하여 동적으로 생성합니다.
+
+### B. Logstash Deployment  
+**목적:** Logstash 파드를 실행시켜 위 설정을 이용해 로그 처리를 수행합니다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: elk
+  labels:
+    app: logstash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      containers:
+      - name: logstash
+        image: docker.elastic.co/logstash/logstash-oss:7.10.2
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        ports:
+        - containerPort: 5044
+          name: logstash-port
+        volumeMounts:
+        - name: logstash-pipeline
+          mountPath: /usr/share/logstash/pipeline/logstash.conf
+          subPath: logstash.conf
+          readOnly: true
+      volumes:
+      - name: logstash-pipeline
+        configMap:
+          name: logstash-config
+          items:
+          - key: logstash.conf
+            path: logstash.conf
+```
+
+- **구성요소:**  
+  - Logstash 이미지를 사용하며, CPU와 메모리 자원을 요청 및 제한합니다.
+  - 컨테이너 내부 포트 5044를 노출하여 Beats 입력을 받습니다.
+  - ConfigMap에서 정의한 `logstash.conf`를 파이프라인 구성 파일로 마운트합니다.
+
+### C. Logstash Service  
+**목적:** 클러스터 내 다른 서비스(Filebeat 등)나 외부에서 Logstash에 접근할 수 있도록 Service를 생성합니다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash-svc
+  namespace: elk
+  labels:
+    app: logstash
+spec:
+  selector:
+    app: logstash
+  ports:
+  - name: beats
+    protocol: TCP
+    port: 5044
+    targetPort: logstash-port
+```
+
+- **동작:**  
+  - `app: logstash` 레이블을 가진 파드로 트래픽을 라우팅하며, 포트 5044를 통해 Logstash에 접속할 수 있습니다.
+
+---
+
+## 2. Elasticsearch 구성
+
+Elasticsearch는 Logstash가 전송한 데이터를 저장하고 색인하여, 빠른 검색 및 분석을 가능하게 합니다.
+
+### A. Elasticsearch ConfigMap  
+**목적:** Elasticsearch의 설정 파일(`elasticsearch.yml`)을 정의하여 네트워크 및 클러스터 모드를 구성합니다.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: elk
+  name: elasticsearch-config
+data:
+  elasticsearch.yml: |-
+    network.host: ["_site_"]
+    discovery.type: single-node
+```
+
+- **설정:**  
+  - `network.host`: `_site_` 설정은 Elasticsearch가 사이트 레벨 IP를 선택하도록 하며,
+  - `discovery.type: single-node`는 단일 노드 모드(주로 개발 또는 테스트 환경)를 사용하도록 지정합니다.
+
+### B. Elasticsearch Service  
+**목적:** Elasticsearch 파드에 접근할 수 있게 해주는 Service입니다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: elk
+  name: elasticsearch-svc
+  labels:
+    app: elasticsearch
+spec:
+  ports:
+  - port: 9200
+    targetPort: es-port
+  clusterIP: None
+  selector:
+    app: elasticsearch
+```
+
+- **특징:**  
+  - `clusterIP: None`으로 headless service를 구성해, 클러스터 내부에서 직접 파드에 접근할 수 있도록 합니다.
+  - 포트 9200을 노출하여 외부(또는 Logstash 등 다른 서비스)에서 Elasticsearch로 접속할 수 있습니다.
+
+### C. Elasticsearch StatefulSet  
+**목적:** Elasticsearch를 StatefulSet으로 배포하여 지속적인 데이터 저장 및 안정적 네트워크 식별을 지원합니다.
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: elk
+  name: elasticsearch
+spec:
+  selector:
+    matchLabels:
+      app: elasticsearch
+  serviceName: "elasticsearch-svc"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.10.2
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        ports:
+        - containerPort: 9200
+          name: es-port
+        volumeMounts:
+        - name: elasticsearch-data
+          mountPath: /usr/share/elasticsearch/data
+        - name: config
+          mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+          subPath: elasticsearch.yml
+          readOnly: true
+      initContainers:
+      - name: fix-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: elasticsearch-data
+          mountPath: /usr/share/elasticsearch/data
+      volumes:
+      - name: config
+        configMap:
+          name: elasticsearch-config
+          items:
+          - key: elasticsearch.yml
+            path: elasticsearch.yml
+  volumeClaimTemplates:
+  - metadata:
+      name: elasticsearch-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+```
+
+- **구성요소:**  
+  - Elasticsearch 파드가 데이터를 저장할 Persistent VolumeClaim을 사용하여 데이터 유실 없이 관리할 수 있습니다.
+  - **InitContainer:** 데이터 디렉터리의 소유권을 올바르게 설정하여 Elasticsearch가 정상적으로 데이터를 기록할 수 있게 합니다.
+
+---
+
+## 3. Filebeat 구성
+
+Filebeat는 로그 파일을 모니터링하고, 수집한 로그를 Logstash로 전달하는 경량 로그 선적기입니다.
+
+### A. Filebeat ConfigMap  
+**목적:** Filebeat의 설정 파일(`filebeat.yml`)을 정의하여 어떤 로그 파일을 수집할지, 그리고 어디로 전송할지 지정합니다.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+  namespace: elk
+data:
+  filebeat.yml: |-
+    filebeat.inputs:
+    - type: container
+      paths:
+        - "/var/lib/docker/containers/*/*.log"
+      processors:
+      - add_kubernetes_metadata:
+          in_cluster: true
+
+    output.logstash:
+      hosts: ["logstash-svc:5044"]
+```
+
+- **로그 입력:**  
+  - `filebeat.inputs`: Container 타입으로, Docker에서 생성된 로그 파일(`/var/lib/docker/containers/*/*.log`)을 수집합니다.
+- **메타데이터:**  
+  - `processors` 섹션을 통해 Kubernetes 관련 메타데이터(예: Pod 이름, 네임스페이스 등)를 로그에 추가합니다.
+- **전송 대상:**  
+  - `output.logstash`: 수집된 로그를 `logstash-svc`의 5044 포트로 전송합니다.
+
+### B. Filebeat DaemonSet  
+**목적:** 각 노드에 Filebeat 에이전트를 배포하여, 해당 노드에서 로그 수집 및 전송이 이루어지도록 합니다.
+
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: filebeat
+  namespace: elk
+  labels:
+    app: filebeat
+spec:
+  selector:
+    matchLabels:
+      app: filebeat
+  template:
+    metadata:
+      labels:
+        app: filebeat
+    spec:
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat-oss:7.10.2
+        args: ["-e"]
+        securityContext:
+          runAsUser: 0
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 100m
+            memory: 300Mi
+        volumeMounts:
+        - name: filebeat-config
+          mountPath: /usr/share/filebeat/filebeat.yml
+          subPath: filebeat.yml
+          readOnly: true
+        - name: varlogdocker
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+      volumes:
+      - name: filebeat-config
+        configMap:
+          name: filebeat-config
+          items:
+          - key: filebeat.yml
+            path: filebeat.yml
+      - name: varlogdocker
+        hostPath:
+          path: /var/lib/docker/containers
+```
+
+- **동작:**  
+  - 클러스터 내 모든 노드에 Filebeat가 실행되어, 지정된 로그 파일을 실시간으로 모니터링합니다.
+  - Filebeat는 수집된 로그를 추가 메타데이터와 함께 Logstash로 전송합니다.
+  - `hostPath`를 이용해 실제 호스트의 `/var/lib/docker/containers` 경로를 컨테이너에 마운트하여 로그 파일에 접근합니다.
+
+---
+
+## 4. 테스트용 로그 생성 애플리케이션 (API Deployment)
+
+**목적:** 로그 파이프라인이 정상적으로 동작하는지 확인하기 위해, 테스트 로그를 발생시키는 애플리케이션을 배포합니다.
+
+### A. Namespace 생성  
+테스트용 리소스는 별도의 네임스페이스 `log-test`에 배포합니다.
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: log-test
+```
+
+### B. API Deployment  
+**목적:** 두 개의 컨테이너(클라이언트와 서버)를 사용해 주기적으로 다양한 로그 메시지를 출력합니다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: log-test
+  name: api
+spec:
+  replicas: 1
+  selector:
+      matchLabels:
+        app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: client
+        image: busybox
+        command:
+        - /bin/sh
+        - "-c"
+        - i=0; while [ $i -le 500 ]; do echo "GET /users/$i"; echo "POST /comments/$i"; echo "DELETE /users/$((i + 50))"; sleep 1; i=$((i + 1)); done
+      - name: server
+        image: busybox
+        command:
+        - /bin/sh
+        - "-c"
+        - i=0; while [ $i -le 255 ]; do echo "[INFO] 192.168.0.$i userId $i checked"; echo "[INFO] userId $i added comment $i"; echo "[WARN] userId $((i + 50)) deleted"; sleep 2; i=$((i + 1)); done
+```
+
+- **클라이언트 컨테이너:**  
+  - 반복문을 통해 HTTP 요청 형식("GET", "POST", "DELETE")의 로그 메시지를 출력합니다.
+- **서버 컨테이너:**  
+  - 반복문을 통해 `[INFO]`나 `[WARN]` 등 형태의 로그 메시지를 출력해, 다양한 로그 패턴을 제공합니다.
+
+이 테스트 애플리케이션이 생성하는 로그는 Docker 로그 파일에 기록되고, Filebeat가 이를 수집하여 Logstash로, 최종적으로 Elasticsearch에 저장되며 Kibana를 통해 확인할 수 있습니다.
+
+---
+
+## 5. Kibana 구성
+
+Kibana는 Elasticsearch에 저장된 로그 데이터를 시각화하여 대시보드 형태로 모니터링할 수 있도록 합니다.
+
+### A. Kibana ConfigMap  
+**목적:** Kibana의 설정 파일(`kibana.yml`)을 정의합니다.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: elk
+data:
+  kibana.yml: |-
+    server.host: 0.0.0.0
+    elasticsearch.hosts: http://elasticsearch-0.elasticsearch-svc:9200
+```
+
+- **설정 내용:**  
+  - `server.host: 0.0.0.0`을 사용해 모든 네트워크 인터페이스에서 접근이 가능하게 함.
+  - Elasticsearch 호스트를 Kibana가 사용하도록 지정합니다.
+
+### B. Kibana Service  
+**목적:** 외부에서 Kibana UI에 접근할 수 있도록 NodePort 타입의 Service를 생성합니다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana-svc
+  namespace: elk
+  labels:
+    app: kibana
+spec:
+  type: NodePort
+  ports:
+  - nodePort: 30601
+    port: 5601 # kibana default port
+    targetPort: kibana-port
+  selector:
+    app: kibana
+```
+
+- **특징:**  
+  - 내부의 5601 포트를 노드의 30601 포트에 매핑해 클러스터 외부에서도 Kibana에 접근할 수 있습니다.
+
+### C. Kibana Deployment  
+**목적:** Kibana 파드를 배포하여 Elasticsearch의 데이터를 시각화합니다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: elk
+  labels:
+    app: kibana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana-oss:7.10.2
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        ports:
+        - containerPort: 5601
+          name: kibana-port
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+          readOnly: true
+      volumes:
+      - name: config
+        configMap: 
+          name: kibana-config
+          items:
+          - key: kibana.yml
+            path: kibana.yml
+```
+
+- **동작:**  
+  - Kibana는 위 ConfigMap을 통해 설정을 로드하고, Elasticsearch에서 데이터를 읽어 사용자에게 대시보드나 로그 검색 인터페이스를 제공합니다.
+
+---
+
+## 전체 파이프라인 동작 요약
+
+1. **로그 생성 (테스트 API):**  
+   - Namespace `log-test`의 API Deployment에서 클라이언트와 서버 컨테이너가 주기적으로 다양한 로그 메시지를 출력합니다.
+2. **로그 수집 (Filebeat):**  
+   - Filebeat DaemonSet이 각 노드에서 `/var/lib/docker/containers/*/*.log` 로그 파일을 모니터링하며, Kubernetes 메타데이터를 추가한 후 Logstash로 로그를 전송합니다.
+3. **로그 처리 (Logstash):**  
+   - Logstash가 Beats 입력으로 Filebeat의 로그를 수신하고, grok 필터를 이용해 로그 패턴을 파싱한 후 Elasticsearch로 출력합니다.
+4. **데이터 저장 및 검색 (Elasticsearch):**  
+   - Elasticsearch StatefulSet이 Logstash에서 받은 데이터를 저장 및 인덱싱하여, 나중에 빠르게 검색할 수 있도록 합니다.
+5. **시각화 (Kibana):**  
+   - Kibana가 Elasticsearch에 저장된 로그 데이터를 시각화하며, NodePort Service를 통해 외부 사용자도 Kibana UI에 접근할 수 있습니다.
+
+이와 같이 각 YAML 파일은 ELK 스택의 각 구성 요소를 배포하고, Filebeat가 로그를 수집하여 Logstash에서 처리한 후 Elasticsearch에 저장하고, Kibana를 통해 로그를 시각화하는 전체 시스템을 구축하는 역할을 합니다.
+
+## 참고자료 Linux 명령어
+```
+[minikube service export]
+> minikube service -p elk-tutorial -n elk kibana-svc
+
+[restart deployment]
+> kubectl -n log-test rollout restart deployment api 
+
+[get all services]
+> kubectl -n elk get all  
+
+[configMap modify]
+> kubectl apply -f logstash/logstash.yml
+
+[kubectl get logs]
+> kubectl -n elk logs pod/logstash-77bc9cc489-kxgmv
+
+[kubectl get configmap]
+> kubectl -n elk describe cm logstash-config
+
+[kubectl create service]
+> kubectl create -f logstash/logstash.yml
+
+[kubectl delete service]
+> kubectl delete -f logstash/logstash.yml
+
+[minikube get pod status]
+> minikube status -p elk-tutorial
+
+[minikube start pod]
+> minikube start -p elk-tutorial
+
+[minikube add cluster]
+> minikube start --nodes 2 -p elk-tutorial
+
+[minikube get profile]
+> minikube profile list
+
+[create namespace]
+> kubectl create ns elk
+```
