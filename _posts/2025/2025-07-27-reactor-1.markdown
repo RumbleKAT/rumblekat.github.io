@@ -173,8 +173,6 @@ result.subscribe(System.out::println);
 
 ---
 
-## ✅ `test6()`
-
 `Flux<List<String>>` + `Mono<List<Integer>>` **zipWith** 조합
 
 ```java
