@@ -1,0 +1,284 @@
+---
+layout: post
+title:  "Reactor 실전 패턴
+date:   2025-07-27 20:23:00 +0900
+categories: dev
+---
+
+## Reactor 실전 패턴
+
+실무하다가 헷깔리는 패턴들을 정의함
+
+
+### 1) `Flux<List<String>>` → **Mono\<List<String>>** (flatten)
+
+```java
+Flux<List<String>> flux = Flux.just(
+    List.of("A","B"),
+    List.of("C"),
+    List.of("D","E")
+);
+
+flux.reduce(new ArrayList<String>(), (acc, list) -> {
+    acc.addAll(list);
+    return acc;
+}).subscribe(result -> System.out.println("reduce: " + result));
+```
+
+* `reduce()`를 사용하여 **리스트를 평탄화(Flatten)**
+* 여러 `List<String>`을 하나의 `List<String>`으로 합침
+
+**결과**
+
+```
+reduce: [A, B, C, D, E]
+```
+
+---
+
+### 2) `Flux<List<List<String>>>` → **Flux<String>** (2단계 flatten)
+
+```java
+Flux<List<List<String>>> flux2 = Flux.just(
+    List.of(List.of("A","B"), List.of("C")),
+    List.of(List.of("D","E"), List.of("F"))
+);
+
+flux2.flatMapIterable(innerLists -> innerLists)
+     .flatMapIterable(list -> list)
+     .subscribe(System.out::println);
+```
+
+* **2중 리스트를 2단계로 풀어서 개별 String까지 평탄화**
+* `[[A,B],[C]] → [A,B,C]`
+
+**결과**
+
+```
+A
+B
+C
+D
+E
+F
+```
+
+---
+
+`Flux → Mono → Flux`로 왕복하는 예제
+
+```java
+Flux<String> flux = Flux.just("A","B","C");
+
+Mono<List<String>> monoList = flux.collectList();         // Flux → Mono<List<String>>
+Flux<String> backToFlux = monoList.flatMapMany(Flux::fromIterable); // Mono<List<String>> → Flux<String>
+
+backToFlux.subscribe(System.out::println);
+```
+
+**결과**
+
+```
+A
+B
+C
+```
+
+👉 **중간에 한 번 `List`로 묶었다가 다시 풀 때 유용**
+
+* 예: Flux를 일단 모아서 정렬/필터 후 다시 Flux로 흘려야 할 때
+
+---
+
+`Flux<List<String>> → Mono<List<String>> → Flux<String>`
+
+```java
+Flux<List<String>> fluxOfLists = Flux.just(
+    List.of("A","B"),
+    List.of("C"),
+    List.of("D","E")
+);
+
+Mono<List<String>> monoList = fluxOfLists
+    .flatMapIterable(list -> list)   // flatten
+    .collectList();                  // Mono<List<String>>
+
+Flux<String> processedFlux = monoList
+    .map(list -> list.stream().map(v -> v + "!").toList()) // 가공
+    .flatMapMany(Flux::fromIterable); // 다시 Flux로
+
+processedFlux.subscribe(System.out::println);
+```
+
+**결과**
+
+```
+A!
+B!
+C!
+D!
+E!
+```
+
+👉 **Flux\<List<T>> → 평탄화 후 가공 → 다시 Flux로 흘리는 패턴**
+
+---
+
+`Mono<List<String>> → Flux<String> → Mono<List<String>>`
+
+```java
+Mono<List<String>> monoList = Mono.just(List.of("A","B","C"));
+
+Mono<List<String>> result = monoList
+    .flatMapMany(Flux::fromIterable) // 펼치기
+    .map(v -> v + "!")
+    .collectList();                   // 다시 모으기
+
+result.subscribe(System.out::println);
+```
+
+**결과**
+
+```
+[A!, B!, C!]
+```
+
+👉 **Mono 안의 리스트를 펼쳐서 가공 후 다시 묶는 패턴**
+
+---
+
+
+`Mono<List<String>> → Flux<List<String>> → Mono<List<String>>`
+
+```java
+Mono<List<String>> monoList = Mono.just(List.of("A","B","C"));
+
+Mono<List<String>> result = monoList
+    .flatMapMany(list -> Flux.just(list)) // Flux<List<String>>
+    .reduce(new ArrayList<>(), (acc, subList) -> { 
+        acc.addAll(subList);
+        return acc;
+    });
+
+result.subscribe(System.out::println);
+```
+
+**결과**
+
+```
+[A, B, C]
+```
+
+👉 **청크로 쪼갤 수도 있지만, 여기선 그대로 리스트 한번 거쳤다가 다시 합친 형태**
+
+---
+
+## ✅ `test6()`
+
+`Flux<List<String>>` + `Mono<List<Integer>>` **zipWith** 조합
+
+```java
+Flux<List<String>> fluxList = Flux.just(
+    List.of("A","B"),
+    List.of("C"),
+    List.of("D","E")
+);
+
+Mono<List<Integer>> monoInts = Mono.just(List.of(1,2,3,4,5));
+
+// zipWith + repeat → Flux 전체 매칭
+Flux<String> zippedFlux = fluxList
+    .zipWith(monoInts.repeat()) 
+    .map(tuple -> tuple.getT1() + "::" + tuple.getT2());
+```
+
+**결과**
+
+```
+[A, B]::[1, 2, 3, 4, 5]
+[C]::[1, 2, 3, 4, 5]
+[D, E]::[1, 2, 3, 4, 5]
+```
+
+---
+
+추가적으로 **flatten → 매칭** 후 다시 Mono<List>로 모으기:
+
+```java
+Mono<List<String>> combinedMono = fluxList
+    .zipWith(monoInts.repeat())
+    .flatMap(tuple -> Flux.fromIterable(tuple.getT1())
+        .zipWithIterable(tuple.getT2())
+        .map(pair -> pair.getT1() + "-" + pair.getT2())
+    )
+    .collectList(); // Mono<List<String>>
+```
+
+**결과**
+
+```
+최종 결과: [A-1, B-2, C-1, D-1, E-2]
+```
+
+---
+
+**Mono를 매번 새롭게 호출하고 싶을 때**
+
+```java
+Flux.just("A","B","C")
+    .flatMap(v -> Mono.defer(() -> {
+        System.out.println("API call: " + v);
+        return Mono.just(v + "-result");
+    }))
+    .subscribe(System.out::println);
+```
+
+**결과**
+
+```
+API call: A
+A-result
+API call: B
+B-result
+API call: C
+C-result
+```
+
+---
+
+`Flux<String>` + `Mono<String>` **zipWith** 동작 차이
+
+```java
+Flux<String> flux = Flux.just("A","B","C");
+Mono<String> mono = Mono.just("X");
+
+flux.zipWith(mono)          // 첫 요소만 매칭
+    .subscribe(t -> System.out.println(t.getT1() + "-" + t.getT2()));
+
+flux.zipWith(mono.repeat()) // repeat → Flux 전체 매칭
+    .subscribe(t -> System.out.println(t.getT1() + "-" + t.getT2()));
+```
+
+**결과**
+
+```
+A-X        (mono는 한 번만 emit → 첫 번째만 매칭)
+A-X
+B-X
+C-X        (repeat() 하면 값 재방출)
+```
+
+👉 **Mono는 1회 emit이라 zip하면 Flux 첫 요소만 매칭됨 → Flux 전체 매칭하려면 repeat() 필요**
+
+---
+
+## ✅ 핵심 패턴
+
+| 상황                                                  | 주요 연산                                             |
+| --------------------------------------------------- | ------------------------------------------------- |
+| `Flux<List<T>>` → `Mono<List<T>>`                   | `reduce()` or `flatMapIterable + collectList()`   |
+| `Flux<T>` → `Mono<List<T>>` → `Flux<T>`             | `collectList()` + `flatMapMany()`                 |
+| `Mono<List<T>>` → `Flux<T>` → `Mono<List<T>>`       | `flatMapMany()` + `collectList()`                 |
+| `Mono<List<T>>` → `Flux<List<T>>` → `Mono<List<T>>` | `flatMapMany(list -> Flux.just(list)) + reduce()` |
+| `Flux` + `Mono` zip                                 | `zipWith(mono.repeat())`                          |
+| Mono를 매번 새 호출                                       | `Mono.defer()`                                    |
